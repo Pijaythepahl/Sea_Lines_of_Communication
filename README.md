@@ -20,6 +20,14 @@ pnpm build
 
 Der statisch auslieferbare Produktionsstand wird unter `dist/` erzeugt.
 
+## Cloudflare-Veröffentlichung
+
+Das Repository ist für die Veröffentlichung als Cloudflare Worker mit statischen Assets vorbereitet:
+
+- Build-Befehl: `pnpm run build`
+- Deploy-Befehl: `npx wrangler deploy`
+- Produktionsdateien: `dist/`
+
 ## Aktueller Umfang
 
 - neun maritime Regionen auf einer interaktiven Hybridkarte
