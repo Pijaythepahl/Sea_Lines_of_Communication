@@ -18,7 +18,7 @@ Rundenbasiertes maritimes Strategiespiel für Desktop und Laptop. MVP 3 bietet e
 - Ein Cloudflare Durable Object führt den autoritativen Spielstand und prüft jede Aktion.
 - WebSockets synchronisieren Karte, Zugwechsel und Verbindungsstatus in Echtzeit.
 - Die gegnerische Kartenhand und beide Nachziehstapel werden nicht an den Browser übertragen.
-- Ein lokales Sitzungstoken ermöglicht die Wiederverbindung nach einem Neuladen.
+- Ein tabbezogenes Sitzungstoken ermöglicht die Wiederverbindung nach einem Neuladen, ohne Blau und Rot in zwei Tabs zu vermischen.
 
 ## Lokal starten
 

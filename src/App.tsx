@@ -826,7 +826,7 @@ export default function App() {
 
   const savedOnlineSession = useMemo(() => {
     try {
-      const raw = localStorage.getItem(ONLINE_SESSION_KEY)
+      const raw = sessionStorage.getItem(ONLINE_SESSION_KEY)
       if (!raw) return undefined
       const parsed = JSON.parse(raw) as OnlineSession
       return parsed.roomCode && parsed.token && parsed.faction ? parsed : undefined
@@ -1025,7 +1025,7 @@ export default function App() {
   }
 
   const enterOnlineSession = (session: OnlineSession, snapshot?: RoomSnapshot) => {
-    localStorage.setItem(ONLINE_SESSION_KEY, JSON.stringify(session))
+    sessionStorage.setItem(ONLINE_SESSION_KEY, JSON.stringify(session))
     setOnlineSession(session)
     setRoomSnapshot(snapshot)
     if (snapshot) setState(snapshot.state)
