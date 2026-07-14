@@ -1,6 +1,8 @@
 node_modules/
 dist/
 .pnpm-store/
+.wrangler/
+.wrangler-home/
 .agents/
 *.tsbuildinfo
 *.local

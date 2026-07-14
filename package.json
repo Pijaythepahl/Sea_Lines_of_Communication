@@ -1,24 +1,30 @@
 {
   "name": "sea-lines-of-communication",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
+  "packageManager": "pnpm@11.7.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:multiplayer": "pnpm build && wrangler dev",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:multiplayer": "node scripts/multiplayer-smoke.mjs",
+    "deploy": "pnpm build && wrangler deploy"
   },
   "dependencies": {
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260713.1",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
     "@vitejs/plugin-react": "^4.4.1",
     "typescript": "^5.8.3",
     "vite": "^6.3.5",
-    "vitest": "^3.1.4"
+    "vitest": "^3.1.4",
+    "wrangler": "^4.110.0"
   }
 }

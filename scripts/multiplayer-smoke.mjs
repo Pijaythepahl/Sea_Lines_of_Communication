@@ -1,0 +1,87 @@
+const base = process.argv[2] ?? 'http://127.0.0.1:8787'
+
+const request = async (path, init) => {
+  const response = await fetch(`${base}${path}`, init)
+  const body = await response.json()
+  if (!response.ok) throw new Error(body.error ?? `HTTP ${response.status}`)
+  return body
+}
+
+const socketFor = (session) => {
+  const url = new URL(base)
+  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
+  url.pathname = `/api/rooms/${session.roomCode}/socket`
+  url.searchParams.set('token', session.token)
+  return new WebSocket(url)
+}
+
+const nextJson = (socket) => new Promise((resolve, reject) => {
+  const onMessage = (event) => {
+    cleanup()
+    resolve(JSON.parse(String(event.data)))
+  }
+  const onError = () => {
+    cleanup()
+    reject(new Error('WebSocket connection failed'))
+  }
+  const cleanup = () => {
+    socket.removeEventListener('message', onMessage)
+    socket.removeEventListener('error', onError)
+  }
+  socket.addEventListener('message', onMessage)
+  socket.addEventListener('error', onError)
+})
+
+const nextJsonWhere = (socket, predicate) => new Promise((resolve, reject) => {
+  const onMessage = (event) => {
+    const value = JSON.parse(String(event.data))
+    if (!predicate(value)) return
+    cleanup()
+    resolve(value)
+  }
+  const onError = () => {
+    cleanup()
+    reject(new Error('WebSocket connection failed'))
+  }
+  const cleanup = () => {
+    socket.removeEventListener('message', onMessage)
+    socket.removeEventListener('error', onError)
+  }
+  socket.addEventListener('message', onMessage)
+  socket.addEventListener('error', onError)
+})
+
+const opened = (socket) => socket.readyState === WebSocket.OPEN
+  ? Promise.resolve()
+  : new Promise((resolve, reject) => {
+    socket.addEventListener('open', resolve, { once: true })
+    socket.addEventListener('error', reject, { once: true })
+  })
+
+const created = await request('/api/rooms', { method: 'POST' })
+if (created.snapshot.status !== 'waiting' || created.session.faction !== 'blue') throw new Error('Room creation contract failed')
+
+const joined = await request(`/api/rooms/${created.session.roomCode}/join`, { method: 'POST' })
+if (joined.snapshot.status !== 'playing' || joined.session.faction !== 'red') throw new Error('Room join contract failed')
+
+const blueSocket = socketFor(created.session)
+const redSocket = socketFor(joined.session)
+const blueInitialPromise = nextJson(blueSocket)
+const redInitialPromise = nextJson(redSocket)
+await Promise.all([opened(blueSocket), opened(redSocket)])
+const [blueInitial, redInitial] = await Promise.all([blueInitialPromise, redInitialPromise])
+
+if (blueInitial.state.hands.red.length !== 0 || redInitial.state.hands.blue.length !== 0) throw new Error('Opponent hand was exposed')
+if (blueInitial.state.hands.blue.length === 0 || redInitial.state.hands.red.length === 0) throw new Error('Own hand is missing')
+
+const blueUpdatePromise = nextJsonWhere(blueSocket, (message) => message.type === 'snapshot' && message.revision > blueInitial.revision)
+const redUpdatePromise = nextJsonWhere(redSocket, (message) => message.type === 'snapshot' && message.revision > redInitial.revision)
+blueSocket.send(JSON.stringify({ type: 'end-turn', revision: blueInitial.revision }))
+const [blueUpdate, redUpdate] = await Promise.all([blueUpdatePromise, redUpdatePromise])
+
+if (blueUpdate.revision !== blueInitial.revision + 1 || redUpdate.revision !== blueUpdate.revision) throw new Error('Revision sync failed')
+if (blueUpdate.state.activeFaction !== 'red' || redUpdate.state.activeFaction !== 'red') throw new Error('Turn sync failed')
+
+blueSocket.close()
+redSocket.close()
+console.log(`Multiplayer smoke test passed for room ${created.session.roomCode}`)

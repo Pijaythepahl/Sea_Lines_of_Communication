@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { chooseAiPlay } from './ai'
 import { CARDS, FACTIONS, REGIONS, REGION_ORDER, RESOURCE_LABELS, ROUTES, ROUTE_ORDER, USABILITY_LABELS } from './data'
 import {
   calculateProjection,
@@ -18,6 +19,16 @@ import {
   otherFaction,
   playCard,
 } from './engine'
+import {
+  createOnlineRoom,
+  isRoomSnapshot,
+  joinOnlineRoom,
+  socketUrl,
+  type ConnectionStatus,
+  type OnlineSession,
+  type RoomCommand,
+  type RoomSnapshot,
+} from './multiplayer'
 import type {
   CardInstance,
   CardPlay,
@@ -32,6 +43,7 @@ import type {
 const STORAGE_KEY = 'sloc-game-v3'
 const V2_STORAGE_KEY = 'sloc-game-v2'
 const LEGACY_STORAGE_KEY = 'sloc-mvp1-game-v1'
+const ONLINE_SESSION_KEY = 'sloc-online-session-v1'
 
 type StoredGameState = Omit<GameState, 'version'> & {
   version: number
@@ -526,9 +538,11 @@ interface HandProps {
   onConfirm: () => void
   onCancel: () => void
   onEndTurn: () => void
+  locked?: boolean
+  waitMessage?: string
 }
 
-const CardHand = ({ state, selected, selectedRegions, selectedRoute, hybridResource, error, onSelect, onResource, onConfirm, onCancel, onEndTurn }: HandProps) => {
+const CardHand = ({ state, selected, selectedRegions, selectedRoute, hybridResource, error, onSelect, onResource, onConfirm, onCancel, onEndTurn, locked = false, waitMessage }: HandProps) => {
   const faction = state.activeFaction
   const hoverTimer = useRef<ReturnType<typeof window.setTimeout> | null>(null)
   const [tooltip, setTooltip] = useState<{
@@ -567,6 +581,24 @@ const CardHand = ({ state, selected, selectedRegions, selectedRoute, hybridResou
   useEffect(() => () => {
     if (hoverTimer.current !== null) window.clearTimeout(hoverTimer.current)
   }, [])
+
+  if (locked) {
+    return (
+      <section className={`hand-panel ${factionClass(faction)} is-locked`}>
+        <div className="action-composer waiting-composer">
+          <div className="composer-copy">
+            <span className="eyebrow">LAGEAKTUALISIERUNG</span>
+            <strong>{waitMessage ?? `${FACTIONS[faction].name} ist am Zug.`}</strong>
+          </div>
+          <span className="waiting-signal" aria-hidden="true"><i /><i /><i /></span>
+        </div>
+        <div className="waiting-hand">
+          <span className="waiting-emblem">✦</span>
+          <div><strong>Gegnerische Befehlshand bleibt verdeckt</strong><p>Die Lagekarte wird nach jeder bestätigten Aktion automatisch aktualisiert.</p></div>
+        </div>
+      </section>
+    )
+  }
 
   return (
     <section className={`hand-panel ${factionClass(faction)}`}>
@@ -650,7 +682,7 @@ const CardHand = ({ state, selected, selectedRegions, selectedRoute, hybridResou
   )
 }
 
-const EndGameDialog = ({ state, onRestart }: { state: GameState; onRestart: () => void }) => {
+const EndGameDialog = ({ state, onRestart, actionLabel = 'Neue Partie beginnen' }: { state: GameState; onRestart: () => void; actionLabel?: string }) => {
   if (state.phase !== 'complete' || !state.winner) return null
   const winner = state.winner.faction
   return (
@@ -665,14 +697,123 @@ const EndGameDialog = ({ state, onRestart }: { state: GameState; onRestart: () =
           <i>:</i>
           <div className="is-red"><span>Rot</span><strong>{state.economicScore.red}</strong></div>
         </div>
-        <button className="confirm-button" type="button" onClick={onRestart}>Neue Partie beginnen</button>
+        <button className="confirm-button" type="button" onClick={onRestart}>{actionLabel}</button>
       </div>
     </div>
   )
 }
 
+interface ModeSelectionProps {
+  busy: boolean
+  error?: string
+  hasSavedSingleGame: boolean
+  savedOnlineSession?: OnlineSession
+  onSingleplayer: (fresh: boolean) => void
+  onCreateRoom: () => void
+  onJoinRoom: (code: string) => void
+  onResumeRoom: (session: OnlineSession) => void
+}
+
+const ModeSelection = ({ busy, error, hasSavedSingleGame, savedOnlineSession, onSingleplayer, onCreateRoom, onJoinRoom, onResumeRoom }: ModeSelectionProps) => {
+  const queryRoom = new URLSearchParams(window.location.search).get('room') ?? ''
+  const [joinCode, setJoinCode] = useState(queryRoom.toUpperCase())
+
+  return (
+    <main className="mode-screen">
+      <div className="mode-backdrop" aria-hidden="true"><i /><i /><i /></div>
+      <header className="mode-brand">
+        <span className="mode-brand-mark">✦</span>
+        <div><span>SEA LINES OF</span><strong>COMMUNICATION</strong><small>MVP 3 · Maritime Strategie gegen KI oder eine zweite Person</small></div>
+      </header>
+      <section className="mode-intro">
+        <span className="eyebrow">EINSATZBEREITSCHAFT HERSTELLEN</span>
+        <h1>Wie möchtest du spielen?</h1>
+        <p>Die Regeln bleiben identisch. Im Einzelspieler führst du Blau gegen die Rote KI. Online erhält jede Person eine eigene, verdeckte Befehlshand.</p>
+      </section>
+      <section className="mode-options" aria-label="Spielmodus wählen">
+        <article className="mode-card single-mode">
+          <span className="mode-number">01</span>
+          <div className="mode-icon" aria-hidden="true">♟</div>
+          <span className="eyebrow">EINZELSPIELER</span>
+          <h2>Blau gegen Rote KI</h2>
+          <p>Du führst die Blaue Koalition. Die KI bewertet Routen, Projektion und Eskalationsrisiko und spielt ihre Züge selbstständig.</p>
+          <ul><li>sofort spielbar</li><li>lokal gespeichert</li><li>sichtbare KI-Züge</li></ul>
+          <button className="mode-primary" type="button" disabled={busy} onClick={() => onSingleplayer(!hasSavedSingleGame)}>
+            {hasSavedSingleGame ? 'Einzelspieler fortsetzen' : 'Einzelspieler starten'} <span>→</span>
+          </button>
+          {hasSavedSingleGame && <button className="mode-text-button" type="button" disabled={busy} onClick={() => onSingleplayer(true)}>Neue Einzelpartie</button>}
+        </article>
+
+        <article className="mode-card online-mode">
+          <span className="mode-number">02</span>
+          <div className="mode-icon" aria-hidden="true">◎</div>
+          <span className="eyebrow">ONLINE-MULTIPLAYER</span>
+          <h2>Blau gegen Rot</h2>
+          <p>Eröffne einen privaten Spielraum oder tritt mit einem sechsstelligen Code bei. Cloudflare synchronisiert und prüft alle Aktionen.</p>
+          <div className="online-actions">
+            <button className="mode-primary" type="button" disabled={busy} onClick={onCreateRoom}>Raum eröffnen <span>→</span></button>
+            <div className="join-row">
+              <input
+                value={joinCode}
+                onChange={(event) => setJoinCode(event.target.value.replace(/[^a-z0-9]/gi, '').toUpperCase().slice(0, 6))}
+                placeholder="RAUMCODE"
+                aria-label="Sechsstelliger Raumcode"
+                maxLength={6}
+              />
+              <button type="button" disabled={busy || joinCode.length !== 6} onClick={() => onJoinRoom(joinCode)}>Beitreten</button>
+            </div>
+          </div>
+          {savedOnlineSession && (
+            <button className="resume-room" type="button" disabled={busy} onClick={() => onResumeRoom(savedOnlineSession)}>
+              Raum {savedOnlineSession.roomCode} als {FACTIONS[savedOnlineSession.faction].adjective} fortsetzen
+            </button>
+          )}
+        </article>
+      </section>
+      {busy && <div className="mode-status"><span className="waiting-signal"><i /><i /><i /></span> Verbindung wird hergestellt …</div>}
+      {error && <div className="mode-error" role="alert">{error}</div>}
+      <footer className="mode-footer"><span>6 Runden</span><i /> <span>Keine Registrierung</span><i /> <span>Private Raumcodes</span></footer>
+    </main>
+  )
+}
+
+const OnlineLobby = ({ session, snapshot, connection, onLeave }: { session: OnlineSession; snapshot?: RoomSnapshot; connection: ConnectionStatus; onLeave: () => void }) => {
+  const [copied, setCopied] = useState(false)
+  const inviteUrl = `${window.location.origin}${window.location.pathname}?room=${session.roomCode}`
+  const copyInvite = async () => {
+    await navigator.clipboard.writeText(inviteUrl)
+    setCopied(true)
+    window.setTimeout(() => setCopied(false), 1800)
+  }
+  return (
+    <main className="mode-screen lobby-screen">
+      <header className="mode-brand compact"><span className="mode-brand-mark">✦</span><div><span>SEA LINES OF</span><strong>COMMUNICATION</strong></div></header>
+      <section className="lobby-card">
+        <span className="eyebrow">PRIVATER SPIELRAUM</span>
+        <h1>{snapshot?.status === 'waiting' ? 'Warten auf Rot' : 'Verbindung wird hergestellt'}</h1>
+        <p>{snapshot?.status === 'waiting'
+          ? 'Teile den Link oder den Raumcode mit der zweiten Person. Du übernimmst die Blaue Koalition.'
+          : `Dein Sitz als ${FACTIONS[session.faction].adjective} wird mit dem gemeinsamen Spielstand verbunden.`}</p>
+        <div className="room-code" aria-label={`Raumcode ${session.roomCode}`}>{session.roomCode.split('').map((letter, index) => <span key={`${letter}-${index}`}>{letter}</span>)}</div>
+        <div className="lobby-actions">
+          <button className="mode-primary" type="button" onClick={copyInvite}>{copied ? 'Link kopiert' : 'Einladungslink kopieren'}</button>
+          <button className="mode-text-button" type="button" onClick={onLeave}>Zurück zur Auswahl</button>
+        </div>
+        <div className={`connection-line ${connection}`}><i /> {connection === 'connected' ? 'Mit Cloudflare verbunden' : 'Verbindung wird aufgebaut …'}</div>
+      </section>
+    </main>
+  )
+}
+
 export default function App() {
+  const [mode, setMode] = useState<'menu' | 'singleplayer' | 'multiplayer'>('menu')
   const [state, setState] = useState<GameState>(loadState)
+  const [onlineSession, setOnlineSession] = useState<OnlineSession>()
+  const [roomSnapshot, setRoomSnapshot] = useState<RoomSnapshot>()
+  const [connection, setConnection] = useState<ConnectionStatus>('offline')
+  const [launcherBusy, setLauncherBusy] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [aiThinking, setAiThinking] = useState(false)
   const [selectedCardId, setSelectedCardId] = useState<string>()
   const [selectedRegions, setSelectedRegions] = useState<RegionId[]>([])
   const [selectedRoute, setSelectedRoute] = useState<RouteId>()
@@ -680,12 +821,102 @@ export default function App() {
   const [inspected, setInspected] = useState<RegionId>('central_basin')
   const [error, setError] = useState<string>()
   const [showRouteRules, setShowRouteRules] = useState(false)
+  const socketRef = useRef<WebSocket | null>(null)
+  const pendingRevisionRef = useRef<number | undefined>(undefined)
+
+  const savedOnlineSession = useMemo(() => {
+    try {
+      const raw = localStorage.getItem(ONLINE_SESSION_KEY)
+      if (!raw) return undefined
+      const parsed = JSON.parse(raw) as OnlineSession
+      return parsed.roomCode && parsed.token && parsed.faction ? parsed : undefined
+    } catch {
+      return undefined
+    }
+  }, [mode])
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
-  }, [state])
+    if (mode === 'singleplayer') localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+  }, [state, mode])
 
-  const selectedCard = state.hands[state.activeFaction].find((entry) => entry.instanceId === selectedCardId)
+  useEffect(() => {
+    if (mode !== 'multiplayer' || !onlineSession) return
+    let disposed = false
+    let reconnectTimer: number | undefined
+
+    const connect = () => {
+      if (disposed) return
+      setConnection((current) => current === 'connected' ? 'reconnecting' : 'connecting')
+      const socket = new WebSocket(socketUrl(onlineSession))
+      socketRef.current = socket
+      socket.addEventListener('open', () => {
+        setConnection('connected')
+        setLauncherBusy(false)
+      })
+      socket.addEventListener('message', (event) => {
+        try {
+          const message = JSON.parse(String(event.data)) as unknown
+          if (isRoomSnapshot(message)) {
+            setRoomSnapshot(message)
+            setState(message.state)
+            if (pendingRevisionRef.current === undefined || message.revision > pendingRevisionRef.current) {
+              pendingRevisionRef.current = undefined
+              setSubmitting(false)
+            }
+            setError(undefined)
+            if (message.status === 'playing' || message.status === 'complete') setLauncherBusy(false)
+          } else if (message && typeof message === 'object' && 'type' in message && message.type === 'error' && 'error' in message) {
+            setError(String(message.error))
+            pendingRevisionRef.current = undefined
+            setSubmitting(false)
+          }
+        } catch {
+          setError('Der empfangene Spielstand konnte nicht gelesen werden.')
+        }
+      })
+      socket.addEventListener('close', () => {
+        if (disposed) return
+        setConnection('reconnecting')
+        pendingRevisionRef.current = undefined
+        setSubmitting(false)
+        socketRef.current = null
+        reconnectTimer = window.setTimeout(connect, 1500)
+      })
+      socket.addEventListener('error', () => socket.close())
+    }
+
+    connect()
+    return () => {
+      disposed = true
+      if (reconnectTimer) window.clearTimeout(reconnectTimer)
+      socketRef.current?.close()
+      socketRef.current = null
+    }
+  }, [mode, onlineSession])
+
+  useEffect(() => {
+    if (mode !== 'singleplayer' || state.phase !== 'action' || state.activeFaction !== 'red') {
+      setAiThinking(false)
+      return
+    }
+    setAiThinking(true)
+    const timer = window.setTimeout(() => {
+      const decision = chooseAiPlay(state)
+      setState((current) => {
+        if (current.activeFaction !== 'red' || current.phase !== 'action') return current
+        return decision ? playCard(current, decision) : endTurn(current)
+      })
+    }, 720)
+    return () => window.clearTimeout(timer)
+  }, [mode, state])
+
+  const isOnline = mode === 'multiplayer'
+  const viewerFaction: FactionId = isOnline && onlineSession ? onlineSession.faction : 'blue'
+  const canAct = state.phase === 'action'
+    && state.activeFaction === viewerFaction
+    && (!isOnline || (roomSnapshot?.status === 'playing' && connection === 'connected' && !submitting))
+
+  const selectedCard = canAct ? state.hands[state.activeFaction].find((entry) => entry.instanceId === selectedCardId) : undefined
   const selectedDefinition = selectedCard ? CARDS[selectedCard.cardId] : undefined
   const validRegions = useMemo(
     () => selectedCard && selectedDefinition?.target !== 'route' && !isPlayReady(selectedCard.cardId, { instanceId: selectedCard.instanceId, regions: selectedRegions, resource: hybridResource })
@@ -706,6 +937,7 @@ export default function App() {
   }
 
   const handleSelectCard = (instance: CardInstance) => {
+    if (!canAct) return
     if (selectedCardId === instance.instanceId) {
       clearSelection()
       return
@@ -731,14 +963,22 @@ export default function App() {
 
   const handleConfirm = () => {
     if (!selectedCard) return
+    const cardPlay: CardPlay = {
+      instanceId: selectedCard.instanceId,
+      regions: selectedRegions,
+      routeId: selectedRoute,
+      resource: hybridResource,
+    }
     try {
-      const next = playCard(state, {
-        instanceId: selectedCard.instanceId,
-        regions: selectedRegions,
-        routeId: selectedRoute,
-        resource: hybridResource,
-      })
-      setState(next)
+      if (isOnline) {
+        if (!roomSnapshot || socketRef.current?.readyState !== WebSocket.OPEN) throw new Error('Die Online-Verbindung ist noch nicht bereit.')
+        const command: RoomCommand = { type: 'play-card', play: cardPlay, revision: roomSnapshot.revision }
+        socketRef.current.send(JSON.stringify(command))
+        pendingRevisionRef.current = roomSnapshot.revision
+        setSubmitting(true)
+      } else {
+        setState(playCard(state, cardPlay))
+      }
       clearSelection()
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Die Aktion konnte nicht ausgeführt werden.')
@@ -746,16 +986,113 @@ export default function App() {
   }
 
   const handleEndTurn = () => {
-    setState((current) => endTurn(current))
-    clearSelection()
+    if (!canAct) return
+    try {
+      if (isOnline) {
+        if (!roomSnapshot || socketRef.current?.readyState !== WebSocket.OPEN) throw new Error('Die Online-Verbindung ist noch nicht bereit.')
+        socketRef.current.send(JSON.stringify({ type: 'end-turn', revision: roomSnapshot.revision } satisfies RoomCommand))
+        pendingRevisionRef.current = roomSnapshot.revision
+        setSubmitting(true)
+      } else {
+        setState((current) => endTurn(current))
+      }
+      clearSelection()
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Der Zug konnte nicht beendet werden.')
+    }
   }
 
-  const restart = () => {
+  const restartSingleplayer = () => {
     if (state.phase !== 'complete' && !window.confirm('Laufende Partie wirklich verwerfen und neu beginnen?')) return
     const fresh = createInitialState()
     setState(fresh)
     setInspected('central_basin')
     clearSelection()
+  }
+
+  const startSingleplayer = (fresh: boolean) => {
+    setError(undefined)
+    if (fresh) {
+      const initial = createInitialState()
+      setState(initial)
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(initial))
+    } else {
+      setState(loadState())
+    }
+    setInspected('central_basin')
+    setMode('singleplayer')
+    clearSelection()
+  }
+
+  const enterOnlineSession = (session: OnlineSession, snapshot?: RoomSnapshot) => {
+    localStorage.setItem(ONLINE_SESSION_KEY, JSON.stringify(session))
+    setOnlineSession(session)
+    setRoomSnapshot(snapshot)
+    if (snapshot) setState(snapshot.state)
+    setConnection('connecting')
+    setMode('multiplayer')
+    setLauncherBusy(true)
+    setError(undefined)
+    clearSelection()
+  }
+
+  const createRoom = async () => {
+    setLauncherBusy(true)
+    setError(undefined)
+    try {
+      const response = await createOnlineRoom()
+      enterOnlineSession(response.session, response.snapshot)
+    } catch (reason) {
+      setLauncherBusy(false)
+      setError(reason instanceof Error ? reason.message : 'Der Spielraum konnte nicht eröffnet werden.')
+    }
+  }
+
+  const joinRoom = async (code: string) => {
+    setLauncherBusy(true)
+    setError(undefined)
+    try {
+      const response = await joinOnlineRoom(code)
+      enterOnlineSession(response.session, response.snapshot)
+      const url = new URL(window.location.href)
+      url.searchParams.delete('room')
+      window.history.replaceState({}, '', url)
+    } catch (reason) {
+      setLauncherBusy(false)
+      setError(reason instanceof Error ? reason.message : 'Der Beitritt ist fehlgeschlagen.')
+    }
+  }
+
+  const leaveToMenu = () => {
+    if (isOnline && roomSnapshot?.status === 'playing' && !window.confirm('Online-Partie verlassen? Du kannst sie später über die Modusauswahl fortsetzen.')) return
+    socketRef.current?.close()
+    setOnlineSession(undefined)
+    setRoomSnapshot(undefined)
+    setConnection('offline')
+    setLauncherBusy(false)
+    pendingRevisionRef.current = undefined
+    setSubmitting(false)
+    setMode('menu')
+    clearSelection()
+  }
+
+  if (mode === 'menu') {
+    return (
+      <ModeSelection
+        busy={launcherBusy}
+        error={error}
+        hasSavedSingleGame={Boolean(localStorage.getItem(STORAGE_KEY))}
+        savedOnlineSession={savedOnlineSession}
+        onSingleplayer={startSingleplayer}
+        onCreateRoom={createRoom}
+        onJoinRoom={joinRoom}
+        onResumeRoom={(session) => enterOnlineSession(session)}
+      />
+    )
+  }
+
+  if (isOnline && onlineSession && roomSnapshot?.status !== 'playing' && roomSnapshot?.status !== 'complete') {
+    return <OnlineLobby session={onlineSession} snapshot={roomSnapshot} connection={connection} onLeave={leaveToMenu} />
   }
 
   const escalationBand = getEscalationBand(state.escalation)
@@ -764,7 +1101,7 @@ export default function App() {
     <div className={`app-shell ${factionClass(state.activeFaction)}`}>
       <header className="topbar">
         <div className="brand-mark" aria-hidden="true"><span>✦</span></div>
-        <div className="brand-copy"><span>SEA LINES OF</span><strong>COMMUNICATION</strong><small>Rundenbasierte Strategie zur maritimen Großwetterlage</small></div>
+        <div className="brand-copy"><span>SEA LINES OF</span><strong>COMMUNICATION</strong><small>{isOnline ? `ONLINE · DU: ${FACTIONS[viewerFaction].adjective}` : 'EINZELSPIELER · DU: BLAU'}</small></div>
         <div className="turn-status">
           <span>RUNDE</span><strong>{state.round}<small>/ {constants.MAX_ROUNDS}</small></strong>
           <i />
@@ -777,7 +1114,7 @@ export default function App() {
           </div>
           <strong>{state.escalation}<small>/{constants.MAX_ESCALATION}</small></strong>
         </div>
-        <button className="new-game" type="button" onClick={restart} title="Neue Partie">↻ <span>Neue Partie</span></button>
+        <button className="new-game" type="button" onClick={isOnline ? leaveToMenu : restartSingleplayer} title={isOnline ? 'Partie verlassen' : 'Neue Partie'}>↻ <span>{isOnline ? 'Modusauswahl' : 'Neue Partie'}</span></button>
       </header>
 
       <main className="game-grid">
@@ -811,13 +1148,21 @@ export default function App() {
           onConfirm={handleConfirm}
           onCancel={clearSelection}
           onEndTurn={handleEndTurn}
+          locked={!canAct}
+          waitMessage={isOnline
+            ? connection !== 'connected'
+              ? 'Verbindung zur gemeinsamen Lage wird wiederhergestellt.'
+              : `${FACTIONS[state.activeFaction].name} plant den nächsten Zug.`
+            : aiThinking
+              ? 'Die Rote KI bewertet SLOCs, Projektion und Eskalationsrisiko.'
+              : 'Die Rote KI übernimmt die Initiative.'}
         />
       </main>
 
       <div className="small-screen-warning">
         <span>✦</span><h1>Größeres Display erforderlich</h1><p>Diese operative Lagekarte ist für Desktop und Laptop ab 1280 Pixel Breite ausgelegt.</p>
       </div>
-      <EndGameDialog state={state} onRestart={restart} />
+      <EndGameDialog state={state} onRestart={isOnline ? leaveToMenu : restartSingleplayer} actionLabel={isOnline ? 'Zur Modusauswahl' : 'Neue Partie beginnen'} />
       {showRouteRules && <RouteRulesDialog onClose={() => setShowRouteRules(false)} />}
     </div>
   )

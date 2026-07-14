@@ -1,12 +1,39 @@
 # Sea Lines of Communication
 
-Lokales, rundenbasiertes Strategiespiel für zwei symmetrische Koalitionen. Eine Person steuert Blau und Rot abwechselnd über sechs Runden.
+Rundenbasiertes maritimes Strategiespiel für Desktop und Laptop. MVP 3 bietet eine Einzelpartie als Blaue Koalition gegen die Rote KI sowie private Online-Partien Blau gegen Rot.
+
+## Spielmodi
+
+### Einzelspieler
+
+- Der Mensch führt Blau, die KI führt Rot.
+- Die KI bewertet Routenertrag, Projektion, gegnerischen Druck und Eskalationskosten.
+- KI-Aktionen werden nacheinander auf der gemeinsamen Lagekarte sichtbar.
+- Der Spielstand wird automatisch im Browser gespeichert.
+
+### Online-Multiplayer
+
+- Blau eröffnet einen privaten Raum und erhält einen sechsstelligen Einladungscode.
+- Rot tritt über den Code oder einen Einladungslink bei.
+- Ein Cloudflare Durable Object führt den autoritativen Spielstand und prüft jede Aktion.
+- WebSockets synchronisieren Karte, Zugwechsel und Verbindungsstatus in Echtzeit.
+- Die gegnerische Kartenhand und beide Nachziehstapel werden nicht an den Browser übertragen.
+- Ein lokales Sitzungstoken ermöglicht die Wiederverbindung nach einem Neuladen.
 
 ## Lokal starten
+
+Nur die Oberfläche mit Einzelspieler:
 
 ```powershell
 pnpm install
 pnpm dev
+```
+
+Vollständige App einschließlich lokaler Online-Spielräume:
+
+```powershell
+pnpm install
+pnpm dev:multiplayer
 ```
 
 Die im Terminal angezeigte Adresse anschließend im Browser öffnen.
@@ -18,14 +45,24 @@ pnpm test
 pnpm build
 ```
 
-Der statisch auslieferbare Produktionsstand wird unter `dist/` erzeugt.
+Für einen automatischen Zwei-Spieler-Verbindungstest muss parallel `pnpm dev:multiplayer` laufen:
+
+```powershell
+pnpm test:multiplayer
+```
 
 ## Cloudflare-Veröffentlichung
 
-Das Repository ist für die Veröffentlichung als Cloudflare Worker mit statischen Assets vorbereitet:
+Das Projekt kombiniert statische Vite-Dateien mit einem Cloudflare Worker und SQLite-basierten Durable Objects:
+
+```powershell
+pnpm deploy
+```
+
+Bei einer Veröffentlichung über die Cloudflare-GitHub-Integration bleiben die Einstellungen:
 
 - Build-Befehl: `pnpm run build`
-- Deploy-Befehl: `npx wrangler deploy`
+- Deploy-Befehl: `pnpm exec wrangler deploy`
 - Produktionsdateien: `dist/`
 
 ## Aktueller Umfang
@@ -35,19 +72,9 @@ Das Repository ist für die Veröffentlichung als Cloudflare Worker mit statisch
 - Haupt- und Ausweich-SLOCs mit exklusiv kontrollierbarem Engpass
 - identische 20-Karten-Decks für Blau und Rot
 - sechs Runden, Wirtschaftsauswertung, Sieger- und Gleichstandsregeln
-- automatische lokale Speicherung im Browser
 - globale Eskalationsleiter mit fünf strategischen Stufen
-- gemeinsamer wirtschaftlicher Eskalationsmalus und zusätzliche Kosten für eigene riskante Aktionen
 - Deeskalation über die Karte „Krisenkommunikation“
+- Einzelspieler-KI für Rot
+- private Online-Räume mit verdeckten Händen und Wiederverbindung
 
-### Eskalation in MVP 2
-
-- **0–1 Stabilität:** kein gemeinsamer Malus
-- **2–3 Spannung:** −1 Routenertrag für beide Seiten
-- **4–5 Krise:** −2 Routenertrag für beide Seiten
-- **6–7 Konfrontation:** −3 Routenertrag für beide Seiten
-- **8 Kontrollverlust:** −4 Routenertrag für beide Seiten
-
-Riskante Karten erzeugen zusätzlich in der aktuellen Runde einen eigenen Verantwortungsmalus in Höhe ihres Eskalationswerts. Eine Runde ohne neue Eskalation senkt die Leiter automatisch um einen Punkt. Jedes Deck enthält zwei Karten „Krisenkommunikation“, die für einen Aktionspunkt die gemeinsame Eskalation um einen Punkt senken.
-
-Nicht enthalten sind Backend, Online-Multiplayer, KI, Weltereignisse und asymmetrische Fraktionen.
+Nicht enthalten sind Benutzerkonten, öffentliches Matchmaking, Ranglisten, Chat, Fraktionsasymmetrie, Audio und vollwertige Smartphone-Unterstützung.
