@@ -93,22 +93,22 @@ export const ROUTES: Record<RouteId, RouteDefinition> = {
   blue_main: {
     id: 'blue_main', faction: 'blue', name: 'Blaue Haupt-SLOC', kind: 'main', baseYield: 6,
     regions: ['western_sea', 'northwest_passage', 'central_basin', 'meridian_strait', 'freeport_sea'],
-    svgPath: 'M102 248 C135 175 198 130 264 120 C325 118 367 184 414 238 C468 255 515 272 552 305 C535 370 499 421 452 448',
+    svgPath: 'M102 248 C140 184 203 124 264 120 C326 116 370 183 414 238 C463 251 515 274 552 305 C540 365 508 421 452 448',
   },
   blue_detour: {
     id: 'blue_detour', faction: 'blue', name: 'Blaue Ausweich-SLOC', kind: 'detour', baseYield: 3,
     regions: ['western_sea', 'southwest_arc', 'freeport_sea'],
-    svgPath: 'M102 248 C72 342 142 435 250 408 C300 396 328 502 394 486 C429 478 444 461 452 448',
+    svgPath: 'M102 248 C38 332 59 449 151 482 C195 498 232 459 250 408 C302 484 391 514 452 448',
   },
   red_main: {
     id: 'red_main', faction: 'red', name: 'Rote Haupt-SLOC', kind: 'main', baseYield: 6,
     regions: ['eastern_sea', 'northeast_passage', 'central_basin', 'meridian_strait', 'freeport_sea'],
-    svgPath: 'M798 248 C765 175 704 130 638 120 C570 116 474 187 414 238 C468 255 515 272 552 305 C535 370 499 421 452 448',
+    svgPath: 'M798 248 C760 184 699 124 638 120 C574 116 478 184 414 238 C463 251 515 274 552 305 C540 365 508 421 452 448',
   },
   red_detour: {
     id: 'red_detour', faction: 'red', name: 'Rote Ausweich-SLOC', kind: 'detour', baseYield: 3,
     regions: ['eastern_sea', 'southeast_arc', 'freeport_sea'],
-    svgPath: 'M798 248 C828 342 758 435 670 408 C620 396 572 502 506 486 C475 478 460 461 452 448',
+    svgPath: 'M798 248 C862 332 841 449 749 482 C705 498 682 459 670 408 C602 484 513 514 452 448',
   },
 }
 

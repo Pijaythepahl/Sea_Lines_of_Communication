@@ -201,9 +201,13 @@ const MapBoard = ({
               <stop offset="1" stopColor="#cbd8d8" />
             </linearGradient>
             <linearGradient id="land" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0" stopColor="#cbbf9e" />
-              <stop offset="1" stopColor="#a99c7b" />
+              <stop offset="0" stopColor="#ded0aa" />
+              <stop offset="0.55" stopColor="#c5b48d" />
+              <stop offset="1" stopColor="#9d8d69" />
             </linearGradient>
+            <pattern id="landTexture" width="14" height="14" patternUnits="userSpaceOnUse">
+              <path d="M-2 11 C3 7 8 7 16 2 M-4 4 C2 0 8 1 14-3" fill="none" stroke="#735f3f" strokeOpacity=".11" strokeWidth=".8" />
+            </pattern>
             <pattern id="chartGrid" width="30" height="30" patternUnits="userSpaceOnUse">
               <path d="M30 0H0V30" fill="none" stroke="#284d61" strokeOpacity=".09" strokeWidth=".7" />
             </pattern>
@@ -213,15 +217,25 @@ const MapBoard = ({
             <filter id="nodeShadow" x="-50%" y="-50%" width="200%" height="200%">
               <feDropShadow dx="0" dy="2" stdDeviation="3" floodColor="#071c2c" floodOpacity=".3" />
             </filter>
+            <filter id="landShadow" x="-20%" y="-20%" width="140%" height="140%">
+              <feDropShadow dx="0" dy="2" stdDeviation="4" floodColor="#203b47" floodOpacity=".24" />
+            </filter>
           </defs>
           <rect width="900" height="530" fill="url(#sea)" />
           <rect width="900" height="530" fill="url(#chartGrid)" />
           <path className="bathymetry" d="M-20 70 C160 135 224 50 383 95 S690 137 930 48" />
           <path className="bathymetry" d="M-10 392 C151 332 278 360 389 414 S693 490 920 401" />
           <path className="bathymetry thin" d="M54 0 C110 173 75 330 153 540 M770 -10 C712 161 758 349 690 540" />
-          <path className="landmass" d="M0 0 H171 C165 42 125 55 105 90 C80 132 43 155 0 146 Z" />
-          <path className="landmass" d="M900 0 H730 C738 52 780 62 800 91 C832 136 866 151 900 145 Z" />
-          <path className="landmass islands" d="M444 10 l20 12 -12 18 -30 -6 -8 -16 Z M555 92 l14 9 -8 17 -22 1 -7 -12 Z M446 376 l17 9 -2 19 -25 9 -14 -13 7 -18 Z" />
+          <g className="map-land" filter="url(#landShadow)">
+            <path className="landmass coast-edge" d="M0 0 H154 C160 31 139 58 112 75 C83 94 69 126 43 143 C29 152 14 158 0 160 Z" />
+            <path className="landmass coast-edge" d="M900 0 H746 C740 31 761 58 788 75 C817 94 831 126 857 143 C871 152 886 158 900 160 Z" />
+            <path className="landmass continent" d="M168 164 C205 136 276 137 327 166 C374 193 387 231 363 267 C344 295 368 317 353 349 C333 391 287 407 248 386 C211 366 202 332 174 307 C142 278 139 208 168 164 Z" />
+            <path className="landmass continent" d="M732 164 C695 136 624 137 573 166 C526 193 513 231 537 267 C556 295 532 317 547 349 C567 391 613 407 652 386 C689 366 698 332 726 307 C758 278 761 208 732 164 Z" />
+            <path className="landmass freeport-island" d="M421 412 C433 393 460 389 477 403 C493 416 493 448 481 468 C469 487 438 490 422 472 C407 455 407 431 421 412 Z" />
+            <path className="land-texture" d="M168 164 C205 136 276 137 327 166 C374 193 387 231 363 267 C344 295 368 317 353 349 C333 391 287 407 248 386 C211 366 202 332 174 307 C142 278 139 208 168 164 Z M732 164 C695 136 624 137 573 166 C526 193 513 231 537 267 C556 295 532 317 547 349 C567 391 613 407 652 386 C689 366 698 332 726 307 C758 278 761 208 732 164 Z" />
+            <path className="coastline-detail" d="M178 174 C216 151 271 151 316 175 M181 297 C207 322 218 362 252 376 M722 174 C684 151 629 151 584 175 M719 297 C693 322 682 362 648 376" />
+            <path className="landmass islands" d="M469 74 l15 8 -7 14 -20 2 -8 -11 Z M405 320 l12 7 -5 13 -18 2 -7 -10 Z M807 397 l14 8 -5 14 -19 2 -8 -11 Z" />
+          </g>
 
           {REGION_ORDER.map((regionId) => {
             const region = regionText(regionId, language)
@@ -291,6 +305,10 @@ const MapBoard = ({
           <strong className={chokepoint ? factionClass(chokepoint) : ''}>
             {chokepoint ? `${factionText(chokepoint, language).adjective} ${pick(language, 'kontrolliert', 'controls')}` : pick(language, 'Offen · nicht kontrolliert', 'Open · uncontrolled')}
           </strong>
+        </div>
+        <div className="sloc-legend" aria-label={pick(language, 'Legende der Seewege', 'Sea line legend')}>
+          <span><i className="main-line" />{pick(language, 'Haupt-SLOC · direkter', 'Main SLOC · more direct')}</span>
+          <span><i className="detour-line" />{pick(language, 'Ausweich-SLOC · länger', 'Detour SLOC · longer')}</span>
         </div>
         <RegionInspector state={state} regionId={inspected} />
       </div>
@@ -761,10 +779,26 @@ interface ModeSelectionProps {
 const ModeSelection = ({ language, onLanguage, rounds, onRounds, busy, error, hasSavedSingleGame, hasSavedLocalGame, savedOnlineSession, onSingleplayer, onLocalPvp, onCreateRoom, onJoinRoom, onResumeRoom }: ModeSelectionProps) => {
   const queryRoom = new URLSearchParams(window.location.search).get('room') ?? ''
   const [joinCode, setJoinCode] = useState(queryRoom.toUpperCase())
+  const [launchMode, setLaunchMode] = useState<'singleplayer' | 'local-pvp' | 'online'>()
+
+  const confirmLaunch = () => {
+    if (launchMode === 'singleplayer') onSingleplayer(true)
+    if (launchMode === 'local-pvp') onLocalPvp(true)
+    if (launchMode === 'online') onCreateRoom()
+    setLaunchMode(undefined)
+  }
 
   return (
     <main className="mode-screen">
       <div className="mode-backdrop" aria-hidden="true"><i /><i /><i /></div>
+      <div className="language-switcher" role="group" aria-label={pick(language, 'Sprache wählen', 'Choose language')}>
+        <button type="button" className={language === 'de' ? 'active' : ''} aria-pressed={language === 'de'} aria-label="Deutsch" title="Deutsch" onClick={() => onLanguage('de')}>
+          <span aria-hidden="true">🇩🇪</span><small>DE</small>
+        </button>
+        <button type="button" className={language === 'en' ? 'active' : ''} aria-pressed={language === 'en'} aria-label="English" title="English" onClick={() => onLanguage('en')}>
+          <span aria-hidden="true">🇬🇧</span><small>EN</small>
+        </button>
+      </div>
       <header className="mode-brand">
         <span className="mode-brand-mark">✦</span>
         <div><span>SEA LINES OF</span><strong>COMMUNICATION</strong><small>{pick(language, 'MVP 5 · Sprache, Einsatzdauer und Aufklärung', 'MVP 5 · Language, campaign length, and awareness')}</small></div>
@@ -774,22 +808,6 @@ const ModeSelection = ({ language, onLanguage, rounds, onRounds, busy, error, ha
         <h1>{pick(language, 'Wie möchtest du spielen?', 'How would you like to play?')}</h1>
         <p>{pick(language, 'Spiele gegen die KI, gemeinsam an einem Gerät oder online. Kartenhände und verdeckte Operationen bleiben in beiden PvP-Modi geschützt.', 'Play against the AI, together on one device, or online. Hands and covert operations remain protected in both PvP modes.')}</p>
       </section>
-      <section className="mode-settings" aria-label={pick(language, 'Spieleinstellungen', 'Game settings')}>
-        <div>
-          <span>{pick(language, 'SPRACHE', 'LANGUAGE')}</span>
-          <div className="segmented-control">
-            <button type="button" className={language === 'de' ? 'active' : ''} onClick={() => onLanguage('de')}>Deutsch</button>
-            <button type="button" className={language === 'en' ? 'active' : ''} onClick={() => onLanguage('en')}>English</button>
-          </div>
-        </div>
-        <div>
-          <span>{pick(language, 'RUNDEN', 'ROUNDS')}</span>
-          <div className="segmented-control">
-            {constants.ROUND_OPTIONS.map((value) => <button type="button" key={value} className={rounds === value ? 'active' : ''} onClick={() => onRounds(value)}>{value}</button>)}
-          </div>
-          <small>{pick(language, 'Gilt für neu gestartete Partien; 6 ist das Minimum.', 'Applies to newly started games; 6 is the minimum.')}</small>
-        </div>
-      </section>
       <section className="mode-options" aria-label={pick(language, 'Spielmodus wählen', 'Choose game mode')}>
         <article className="mode-card single-mode">
           <span className="mode-number">01</span>
@@ -798,10 +816,10 @@ const ModeSelection = ({ language, onLanguage, rounds, onRounds, busy, error, ha
           <h2>{pick(language, 'Blau gegen Rote KI', 'Blue vs Red AI')}</h2>
           <p>{pick(language, 'Du führst die Blaue Koalition. Die KI bewertet Routen, Projektion und Eskalationsrisiko und spielt ihre Züge selbstständig.', 'You lead the Blue Coalition. The AI evaluates routes, Projection, and Escalation risk and plays its turns independently.')}</p>
           <ul><li>{pick(language, 'sofort spielbar', 'play immediately')}</li><li>{pick(language, 'lokal gespeichert', 'saved locally')}</li><li>{pick(language, 'sichtbare KI-Züge', 'visible AI turns')}</li></ul>
-          <button className="mode-primary" type="button" disabled={busy} onClick={() => onSingleplayer(!hasSavedSingleGame)}>
+          <button className="mode-primary" type="button" disabled={busy} onClick={() => hasSavedSingleGame ? onSingleplayer(false) : setLaunchMode('singleplayer')}>
             {hasSavedSingleGame ? pick(language, 'Einzelspieler fortsetzen', 'Continue single player') : pick(language, 'Einzelspieler starten', 'Start single player')} <span>→</span>
           </button>
-          {hasSavedSingleGame && <button className="mode-text-button" type="button" disabled={busy} onClick={() => onSingleplayer(true)}>{pick(language, 'Neue Einzelpartie', 'New single-player game')}</button>}
+          {hasSavedSingleGame && <button className="mode-text-button" type="button" disabled={busy} onClick={() => setLaunchMode('singleplayer')}>{pick(language, 'Neue Einzelpartie', 'New single-player game')}</button>}
         </article>
 
         <article className="mode-card local-mode">
@@ -811,10 +829,10 @@ const ModeSelection = ({ language, onLanguage, rounds, onRounds, busy, error, ha
           <h2>Pass-and-play</h2>
           <p>{pick(language, 'Blau und Rot teilen sich ein Gerät. Ein Übergabebildschirm schützt Hände und vorbereitete Operationen vor der jeweils anderen Seite.', 'Blue and Red share one device. A handoff screen protects hands and prepared operations from the other side.')}</p>
           <ul><li>{pick(language, 'kein Netzwerk nötig', 'no network required')}</li><li>{pick(language, 'separat gespeichert', 'saved separately')}</li><li>{pick(language, 'verdeckte Hände', 'hidden hands')}</li></ul>
-          <button className="mode-primary" type="button" disabled={busy} onClick={() => onLocalPvp(!hasSavedLocalGame)}>
+          <button className="mode-primary" type="button" disabled={busy} onClick={() => hasSavedLocalGame ? onLocalPvp(false) : setLaunchMode('local-pvp')}>
             {hasSavedLocalGame ? pick(language, 'Lokale Partie fortsetzen', 'Continue local game') : pick(language, 'Lokale Partie starten', 'Start local game')} <span>→</span>
           </button>
-          {hasSavedLocalGame && <button className="mode-text-button" type="button" disabled={busy} onClick={() => onLocalPvp(true)}>{pick(language, 'Neue lokale Partie', 'New local game')}</button>}
+          {hasSavedLocalGame && <button className="mode-text-button" type="button" disabled={busy} onClick={() => setLaunchMode('local-pvp')}>{pick(language, 'Neue lokale Partie', 'New local game')}</button>}
         </article>
 
         <article className="mode-card online-mode">
@@ -824,7 +842,7 @@ const ModeSelection = ({ language, onLanguage, rounds, onRounds, busy, error, ha
           <h2>{pick(language, 'Blau gegen Rot', 'Blue vs Red')}</h2>
           <p>{pick(language, 'Eröffne einen privaten Spielraum oder tritt mit einem sechsstelligen Code bei. Cloudflare synchronisiert und prüft alle Aktionen.', 'Open a private game room or join with a six-character code. Cloudflare synchronizes and validates every action.')}</p>
           <div className="online-actions">
-            <button className="mode-primary" type="button" disabled={busy} onClick={onCreateRoom}>{pick(language, 'Raum eröffnen', 'Open room')} <span>→</span></button>
+            <button className="mode-primary" type="button" disabled={busy} onClick={() => setLaunchMode('online')}>{pick(language, 'Raum eröffnen', 'Open room')} <span>→</span></button>
             <div className="join-row">
               <input
                 value={joinCode}
@@ -845,7 +863,31 @@ const ModeSelection = ({ language, onLanguage, rounds, onRounds, busy, error, ha
       </section>
       {busy && <div className="mode-status"><span className="waiting-signal"><i /><i /><i /></span> {pick(language, 'Verbindung wird hergestellt …', 'Establishing connection …')}</div>}
       {error && <div className="mode-error" role="alert">{formatError(error, language)}</div>}
-      <footer className="mode-footer"><span>{rounds} {pick(language, 'Runden', 'Rounds')}</span><i /> <span>{pick(language, 'Keine Registrierung', 'No registration')}</span><i /> <span>{pick(language, 'Private Raumcodes', 'Private room codes')}</span></footer>
+      <footer className="mode-footer"><span>6–18 {pick(language, 'Runden', 'Rounds')}</span><i /> <span>{pick(language, 'Keine Registrierung', 'No registration')}</span><i /> <span>{pick(language, 'Private Raumcodes', 'Private room codes')}</span></footer>
+      {launchMode && (
+        <div className="modal-backdrop launch-backdrop" role="dialog" aria-modal="true" aria-labelledby="round-selection-title">
+          <section className={`round-selection-dialog ${launchMode === 'online' ? 'is-online' : ''}`}>
+            <span className="eyebrow">{pick(language, 'EINSATZDAUER', 'CAMPAIGN LENGTH')}</span>
+            <h2 id="round-selection-title">{pick(language, 'Wie viele Runden?', 'How many rounds?')}</h2>
+            <p>{launchMode === 'online'
+              ? pick(language, 'Du legst die Dauer für den neuen privaten Spielraum fest.', 'You set the length of the new private game room.')
+              : pick(language, 'Wähle die Dauer der neuen Partie. Sechs Runden sind das Minimum.', 'Choose the length of the new game. Six rounds is the minimum.')}</p>
+            <div className="round-choice" role="group" aria-label={pick(language, 'Rundenzahl', 'Number of rounds')}>
+              {constants.ROUND_OPTIONS.map((value) => (
+                <button type="button" key={value} className={rounds === value ? 'active' : ''} aria-pressed={rounds === value} onClick={() => onRounds(value)}>
+                  <strong>{value}</strong><span>{pick(language, 'Runden', 'Rounds')}</span>
+                </button>
+              ))}
+            </div>
+            <div className="round-dialog-actions">
+              <button className="mode-text-button" type="button" disabled={busy} onClick={() => setLaunchMode(undefined)}>{pick(language, 'Abbrechen', 'Cancel')}</button>
+              <button className="mode-primary" type="button" disabled={busy} onClick={confirmLaunch}>
+                {launchMode === 'online' ? pick(language, 'Raum eröffnen', 'Open room') : pick(language, 'Partie starten', 'Start game')} <span>→</span>
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
     </main>
   )
 }
