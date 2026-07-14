@@ -304,8 +304,8 @@ button:focus-visible, [role="button"]:focus-visible { outline: 3px solid var(--b
 .route-entry b.blocked { color: var(--denied); font-size: 9px; }
 
 .round-track { margin-top: auto; }
-.round-dots { display: flex; justify-content: space-between; position: relative; }
-.round-dots::before { content: ""; position: absolute; left: 15px; right: 15px; top: 11px; height: 1px; background: #aeb4b3; }
+.round-dots { display: grid; grid-template-columns: repeat(6, 1fr); justify-items: center; gap: 4px; position: relative; }
+.round-dots::before { display: none; }
 .round-dots span { position: relative; width: 23px; height: 23px; display: grid; place-items: center; color: var(--muted); background: var(--paper); border: 1px solid #aeb4b3; border-radius: 50%; font-size: 8px; font-weight: 800; }
 .round-dots span.complete { color: #fff; background: var(--navy-700); border-color: var(--navy-700); }
 .round-dots span.current { color: var(--navy-950); background: var(--brass-light); border-color: var(--brass); box-shadow: 0 0 0 3px rgba(179,138,69,.18); }
@@ -464,6 +464,14 @@ button:focus-visible, [role="button"]:focus-visible { outline: 3px solid var(--b
 .mode-intro { position: relative; z-index: 1; max-width: 780px; margin: clamp(28px, 5vh, 62px) auto 27px; text-align: center; }
 .mode-intro h1 { margin: 8px 0 10px; font-family: Georgia, serif; font-size: clamp(31px, 3vw, 48px); font-weight: 500; letter-spacing: .025em; }
 .mode-intro p { max-width: 670px; margin: 0 auto; color: #b7c7ce; font-size: 13px; line-height: 1.65; }
+.mode-settings { position: relative; z-index: 2; display: flex; justify-content: center; gap: 34px; margin: 0 auto 24px; color: #d4e0e4; }
+.mode-settings > div { display: grid; grid-template-columns: auto auto; align-items: center; gap: 8px 12px; }
+.mode-settings > div > span { color: #95aab4; font-size: 8px; font-weight: 900; letter-spacing: .13em; }
+.mode-settings small { grid-column: 1 / -1; color: #78909b; font-size: 8px; text-align: right; }
+.segmented-control { display: flex; padding: 3px; background: rgba(255,255,255,.06); border: 1px solid rgba(215,184,121,.3); }
+.segmented-control button { min-width: 54px; padding: 7px 11px; color: #aebfc6; background: transparent; border: 0; font-size: 9px; font-weight: 900; letter-spacing: .04em; cursor: pointer; }
+.segmented-control button:hover { color: #fff; }
+.segmented-control button.active { color: var(--navy-950); background: var(--brass-light); box-shadow: 0 2px 8px rgba(0,0,0,.25); }
 .mode-options { position: relative; z-index: 1; display: grid; grid-template-columns: repeat(2, minmax(340px, 520px)); justify-content: center; gap: clamp(18px, 3vw, 40px); }
 .mode-card { position: relative; min-height: 450px; padding: 29px 31px 24px; color: var(--ink); background: linear-gradient(145deg, rgba(250,247,237,.98), rgba(227,220,201,.96)); border: 1px solid var(--brass); box-shadow: 0 24px 65px rgba(0,0,0,.32), inset 0 0 0 5px rgba(9,37,55,.05); }
 .mode-card::before { content: ""; position: absolute; inset: 8px; pointer-events: none; border: 1px solid rgba(179,138,69,.32); }
@@ -597,6 +605,7 @@ button:focus-visible, [role="button"]:focus-visible { outline: 3px solid var(--b
   .mode-brand > div > span, .mode-brand strong { display: block; }
   .mode-brand strong { margin-top: 3px; font-size: 18px; }
   .mode-options { grid-template-columns: minmax(0, 1fr); }
+  .mode-settings { flex-direction: column; align-items: center; gap: 12px; }
   .mode-card { min-height: 0; }
   .lobby-card { padding: 30px 18px; }
   .room-code { gap: 4px; }

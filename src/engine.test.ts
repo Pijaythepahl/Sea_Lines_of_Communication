@@ -80,6 +80,26 @@ describe('Engpass und Handelsrouten', () => {
 })
 
 describe('Karten und Rundenfolge', () => {
+  it('verbessert beim Aufbau von Präsenz das Lagebild bis 2, aber nicht beim bloßen Verlegen', () => {
+    const state = createInitialState()
+    const deployment = putCardInBlueHand(state, 'forward_deployment')
+    const reinforced = playCard(state, { instanceId: deployment.instanceId, regions: ['western_sea'] })
+    expect(reinforced.regions.western_sea.resources.blue).toMatchObject({ presence: 3, awareness: 2 })
+
+    const patrolState = createInitialState()
+    const patrol = putCardInBlueHand(patrolState, 'patrol_group')
+    const moved = playCard(patrolState, { instanceId: patrol.instanceId, regions: ['western_sea', 'southwest_arc'] })
+    expect(moved.regions.southwest_arc.resources.blue).toMatchObject({ presence: 1, awareness: 0 })
+  })
+
+  it('begrenzt den Lagebildbonus aus Präsenzaufbau auf 2', () => {
+    const state = createInitialState()
+    state.regions.western_sea.resources.blue.awareness = 2
+    const deployment = putCardInBlueHand(state, 'forward_deployment')
+    const reinforced = playCard(state, { instanceId: deployment.instanceId, regions: ['western_sea'] })
+    expect(reinforced.regions.western_sea.resources.blue.awareness).toBe(2)
+  })
+
   it('suspendiert gegnerische Ressourcen nur bis zur nächsten Wirtschaftsauswertung', () => {
     const state = createInitialState()
     state.regions.central_basin.resources.red.logistics = 1
@@ -214,15 +234,42 @@ describe('Karten und Rundenfolge', () => {
 })
 
 describe('Migration und Abschlussbewertung', () => {
-  it('migriert einen Version-3-Spielstand mit neutralen MVP-4-Feldern', () => {
+  it('migriert ältere Spielstände auf MVP 5 und sechs Runden', () => {
     const legacy = structuredClone(createInitialState()) as unknown as Record<string, unknown>
-    legacy.version = 3
+    legacy.version = 4
+    delete legacy.maxRounds
     delete legacy.routeCapacity
     delete legacy.covertOperations
     const migrated = migrateGameState(legacy)
-    expect(migrated.version).toBe(4)
+    expect(migrated.version).toBe(5)
+    expect(migrated.maxRounds).toBe(6)
     expect(migrated.routeCapacity).toMatchObject({ blue_main: 6, blue_detour: 3 })
     expect(migrated.covertOperations).toEqual([])
+  })
+
+  it('beendet Partien nach der gewählten Rundenzahl und stattet 18 Runden mit genug Karten aus', () => {
+    const state = createInitialState(12)
+    state.round = 12
+    const secondTurn = endTurn(state)
+    const complete = endTurn(secondTurn)
+    expect(complete.phase).toBe('complete')
+    expect(complete.round).toBe(12)
+
+    const longGame = createInitialState(18)
+    expect(longGame.maxRounds).toBe(18)
+    expect(longGame.decks.blue.length + longGame.hands.blue.length).toBe(30)
+  })
+
+  it('skaliert die Wirtschaftsanteile der Führungswertung mit der Rundenzahl', () => {
+    const short = createInitialState(6)
+    short.economicScore.blue = 18
+    short.winner = { faction: 'blue', reason: 'Test' }
+    expect(calculateLeadershipRating(short, 'blue').components.economy).toBe(1)
+
+    const long = createInitialState(12)
+    long.economicScore.blue = 36
+    long.winner = { faction: 'blue', reason: 'Test' }
+    expect(calculateLeadershipRating(long, 'blue').components.economy).toBe(1)
   })
 
   it('berechnet Sterne getrennt vom wirtschaftlichen Sieger', () => {

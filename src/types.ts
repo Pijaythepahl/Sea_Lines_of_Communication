@@ -1,4 +1,5 @@
 export type FactionId = 'blue' | 'red'
+export type RoundCount = 6 | 12 | 18
 
 export type RegionId =
   | 'western_sea'
@@ -141,11 +142,14 @@ export interface LogEntry {
   round: number
   faction?: FactionId
   message: string
+  code?: string
+  params?: Record<string, string | number | boolean>
 }
 
 export interface WinnerResult {
   faction: FactionId | null
   reason: string
+  reasonCode?: 'economy' | 'final-yield' | 'projection' | 'draw'
 }
 
 export interface LeadershipRating {
@@ -162,7 +166,8 @@ export interface LeadershipRating {
 }
 
 export interface GameState {
-  version: 4
+  version: 5
+  maxRounds: RoundCount
   round: number
   phase: GamePhase
   activeFaction: FactionId

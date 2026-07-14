@@ -134,8 +134,8 @@ export const CARDS: Record<CardId, CardDefinition> = {
   },
   forward_deployment: {
     id: 'forward_deployment', title: 'Vorausstationierung', domain: 'Präsenz', icon: '▲', cost: 2, target: 'region',
-    description: '+1 Präsenz in einer logistisch erschlossenen Region.', instruction: 'Wähle eine Region mit eigener aktiver Logistik.',
-    playHint: 'Nur in einer Region mit mindestens 1 aktiver eigener Logistik und weniger als 3 eigener Präsenz spielbar.',
+    description: '+1 Präsenz und bis zu +1 Lagebild in einer logistisch erschlossenen Region.', instruction: 'Wähle eine Region mit eigener aktiver Logistik.',
+    playHint: 'Nur in einer Region mit mindestens 1 aktiver eigener Logistik und weniger als 3 eigener Präsenz spielbar. Präsenz verbessert das Lagebild bis maximal 2.',
     escalation: 1, escalationReason: 'Sichtbare Verstärkung vorgeschobener Kräfte',
   },
   isr_recon: {

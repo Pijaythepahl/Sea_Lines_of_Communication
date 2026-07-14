@@ -25,6 +25,24 @@ import {
   upgradeDetour,
 } from './engine'
 import {
+  LanguageProvider,
+  cardText,
+  escalationLabel,
+  factionText,
+  formatError,
+  formatLogEntry,
+  formatYieldReason,
+  formatWinnerReason,
+  leadershipLabel,
+  pick,
+  regionText,
+  resourceText,
+  routeText,
+  usabilityText,
+  useLanguage,
+  type Language,
+} from './i18n'
+import {
   createOnlineRoom,
   isRoomSnapshot,
   joinOnlineRoom,
@@ -42,20 +60,26 @@ import type {
   RegionId,
   ResourceKey,
   RouteId,
+  RoundCount,
   SuspendableResource,
 } from './types'
 
-const STORAGE_KEY = 'sloc-game-v4'
-const LOCAL_PVP_STORAGE_KEY = 'sloc-local-pvp-v4'
+const STORAGE_KEY = 'sloc-game-v5'
+const LOCAL_PVP_STORAGE_KEY = 'sloc-local-pvp-v5'
+const V4_STORAGE_KEY = 'sloc-game-v4'
+const V4_LOCAL_PVP_STORAGE_KEY = 'sloc-local-pvp-v4'
 const V3_STORAGE_KEY = 'sloc-game-v3'
 const V2_STORAGE_KEY = 'sloc-game-v2'
 const LEGACY_STORAGE_KEY = 'sloc-mvp1-game-v1'
 const ONLINE_SESSION_KEY = 'sloc-online-session-v1'
+const LANGUAGE_KEY = 'sloc-language-v1'
 
 const loadState = (storageKey = STORAGE_KEY): GameState => {
   try {
     const raw = localStorage.getItem(storageKey)
-      ?? (storageKey === STORAGE_KEY ? localStorage.getItem(V3_STORAGE_KEY) ?? localStorage.getItem(V2_STORAGE_KEY) ?? localStorage.getItem(LEGACY_STORAGE_KEY) : null)
+      ?? (storageKey === STORAGE_KEY
+        ? localStorage.getItem(V4_STORAGE_KEY) ?? localStorage.getItem(V3_STORAGE_KEY) ?? localStorage.getItem(V2_STORAGE_KEY) ?? localStorage.getItem(LEGACY_STORAGE_KEY)
+        : storageKey === LOCAL_PVP_STORAGE_KEY ? localStorage.getItem(V4_LOCAL_PVP_STORAGE_KEY) : null)
     if (!raw) return createInitialState()
     const parsed = JSON.parse(raw) as GameState
     if (!parsed.regions?.central_basin || !parsed.hands?.blue) return createInitialState()
@@ -108,10 +132,11 @@ const CardIcon = ({ cardId }: { cardId: CardInstance['cardId'] }) => {
 }
 
 const MapResourceRow = ({ state, faction, regionId }: { state: GameState; faction: FactionId; regionId: RegionId }) => {
+  const language = useLanguage()
   const resources = getEffectiveResources(state, regionId, faction)
   return (
     <g>
-      <title>{`${FACTIONS[faction].adjective}: Präsenz ${resources.presence}, Lagebild ${resources.awareness}, Zugang ${resources.access}, Logistik ${resources.logistics}`}</title>
+      <title>{`${factionText(faction, language).adjective}: ${resourceText('presence', language).name} ${resources.presence}, ${resourceText('awareness', language).name} ${resources.awareness}, ${resourceText('access', language).name} ${resources.access}, ${resourceText('logistics', language).name} ${resources.logistics}`}</title>
       <rect className={`resource-pill ${faction}`} width="126" height="16" rx="8" />
       {RESOURCE_ORDER.map((resource, index) => {
         const x = 8 + index * 30
@@ -147,27 +172,28 @@ const MapBoard = ({
   onRegionClick,
   onRouteClick,
 }: MapBoardProps) => {
+  const language = useLanguage()
   const chokepoint = evaluateChokepoint(state)
   return (
-    <section className="map-panel" aria-label="Strategische Seekarte">
+    <section className="map-panel" aria-label={pick(language, 'Strategische Seekarte', 'Strategic maritime map')}>
       <div className="map-heading">
         <div>
-          <span className="eyebrow">OPERATIVES LAGEBILD</span>
+          <span className="eyebrow">{pick(language, 'OPERATIVES LAGEBILD', 'OPERATIONAL PICTURE')}</span>
           <h2>Pelagos-Archipel</h2>
         </div>
         <div className="map-legend-stack">
-          <div className="map-legend" aria-label="Statuslegende">
-            <span><i className="legend-dot free" /> frei</span>
-            <span><i className="legend-dot contested" /> umkämpft</span>
-            <span><i className="legend-dot denied" /> verwehrt</span>
+          <div className="map-legend" aria-label={pick(language, 'Statuslegende', 'Status legend')}>
+            <span><i className="legend-dot free" /> {pick(language, 'frei', 'open')}</span>
+            <span><i className="legend-dot contested" /> {pick(language, 'umkämpft', 'contested')}</span>
+            <span><i className="legend-dot denied" /> {pick(language, 'verwehrt', 'denied')}</span>
           </div>
-          <div className="map-resource-key" aria-label="Ressourcenlegende">
-            {RESOURCE_ORDER.map((resource) => <span key={resource}><ResourceIcon resource={resource} />{RESOURCE_LABELS[resource].name}</span>)}
+          <div className="map-resource-key" aria-label={pick(language, 'Ressourcenlegende', 'Resource legend')}>
+            {RESOURCE_ORDER.map((resource) => <span key={resource}><ResourceIcon resource={resource} />{resourceText(resource, language).name}</span>)}
           </div>
         </div>
       </div>
       <div className="map-stage">
-        <svg className="strategy-map" viewBox="0 0 900 530" role="img" aria-label="Fiktive maritime Karte mit neun Regionen und vier Sea Lines of Communication">
+        <svg className="strategy-map" viewBox="0 0 900 530" role="img" aria-label={pick(language, 'Fiktive maritime Karte mit neun Regionen und vier Sea Lines of Communication', 'Fictional maritime map with nine regions and four Sea Lines of Communication')}>
           <defs>
             <linearGradient id="sea" x1="0" y1="0" x2="1" y2="1">
               <stop offset="0" stopColor="#e9e4d6" />
@@ -198,7 +224,7 @@ const MapBoard = ({
           <path className="landmass islands" d="M444 10 l20 12 -12 18 -30 -6 -8 -16 Z M555 92 l14 9 -8 17 -22 1 -7 -12 Z M446 376 l17 9 -2 19 -25 9 -14 -13 7 -18 Z" />
 
           {REGION_ORDER.map((regionId) => {
-            const region = REGIONS[regionId]
+            const region = regionText(regionId, language)
             const usability = getUsability(state, regionId, state.activeFaction)
             const isValid = validRegions.includes(regionId)
             const isSelected = selectedRegions.includes(regionId)
@@ -213,7 +239,7 @@ const MapBoard = ({
           })}
 
           {ROUTE_ORDER.map((routeId) => {
-            const route = ROUTES[routeId]
+            const route = routeText(routeId, language)
             const result = calculateRouteYield(state, routeId)
             const valid = validRoutes.includes(routeId)
             return (
@@ -225,7 +251,7 @@ const MapBoard = ({
           })}
 
           {REGION_ORDER.map((regionId) => {
-            const region = REGIONS[regionId]
+            const region = regionText(regionId, language)
             const usability = getUsability(state, regionId, state.activeFaction)
             const selected = inspected === regionId
             const valid = validRegions.includes(regionId)
@@ -236,13 +262,13 @@ const MapBoard = ({
                 transform={`translate(${region.x} ${region.y})`}
                 onClick={() => onRegionClick(regionId)}
                 role="button"
-                aria-label={`${region.name}, ${USABILITY_LABELS[usability].label} für ${FACTIONS[state.activeFaction].adjective}`}
+                aria-label={`${region.name}, ${usabilityText(usability, language).label} ${pick(language, 'für', 'for')} ${factionText(state.activeFaction, language).adjective}`}
               >
                 <circle className="node-ring" r={region.chokepoint ? 29 : 25} />
                 <circle className="node-core" r={region.chokepoint ? 22 : 19} />
                 <text className="node-symbol" y="5">{region.chokepoint ? '◇' : region.market ? '¤' : '✦'}</text>
                 <text className="node-title" y={-34}>{region.shortName}</text>
-                <text className="node-status" y={region.chokepoint ? 45 : 41}>{USABILITY_LABELS[usability].short}</text>
+                <text className="node-status" y={region.chokepoint ? 45 : 41}>{usabilityText(usability, language).short}</text>
                 <g transform="translate(-63 47)">
                   <MapResourceRow state={state} regionId={regionId} faction="blue" />
                 </g>
@@ -261,9 +287,9 @@ const MapBoard = ({
         </svg>
 
         <div className="choke-indicator">
-          <span className="eyebrow">MERIDIANSTRASSE</span>
+          <span className="eyebrow">{pick(language, 'MERIDIANSTRASSE', 'MERIDIAN STRAIT')}</span>
           <strong className={chokepoint ? factionClass(chokepoint) : ''}>
-            {chokepoint ? `${FACTIONS[chokepoint].adjective} kontrolliert` : 'Offen · nicht kontrolliert'}
+            {chokepoint ? `${factionText(chokepoint, language).adjective} ${pick(language, 'kontrolliert', 'controls')}` : pick(language, 'Offen · nicht kontrolliert', 'Open · uncontrolled')}
           </strong>
         </div>
         <RegionInspector state={state} regionId={inspected} />
@@ -273,13 +299,14 @@ const MapBoard = ({
 }
 
 const RegionInspector = ({ state, regionId }: { state: GameState; regionId: RegionId }) => {
-  const region = REGIONS[regionId]
+  const language = useLanguage()
+  const region = regionText(regionId, language)
   return (
     <aside className="region-inspector" aria-live="polite">
       <div className="inspector-title">
-        <div><span className="eyebrow">REGION</span><h3>{region.name}</h3></div>
-        {region.chokepoint && <span className="special-tag">ENGPASS</span>}
-        {region.market && <span className="special-tag">MARKT</span>}
+        <div><span className="eyebrow">{pick(language, 'REGION', 'REGION')}</span><h3>{region.name}</h3></div>
+        {region.chokepoint && <span className="special-tag">{pick(language, 'ENGPASS', 'CHOKEPOINT')}</span>}
+        {region.market && <span className="special-tag">{pick(language, 'MARKT', 'MARKET')}</span>}
       </div>
       <p>{region.subtitle}</p>
       <div className="inspector-factions">
@@ -289,13 +316,13 @@ const RegionInspector = ({ state, regionId }: { state: GameState; regionId: Regi
           const suspended = state.suspensions.some((entry) => entry.faction === faction && entry.regionId === regionId)
           return (
             <div className={`inspector-faction ${factionClass(faction)}`} key={faction}>
-              <div><strong>{FACTIONS[faction].adjective}</strong><span className={`status-text ${usability}`}>{USABILITY_LABELS[usability].label}</span></div>
+              <div><strong>{factionText(faction, language).adjective}</strong><span className={`status-text ${usability}`}>{usabilityText(usability, language).label}</span></div>
               <div className="mini-resources">
                 {RESOURCE_ORDER.map((resource) => (
-                  <span key={resource} title={RESOURCE_LABELS[resource].name}><ResourceIcon resource={resource} /><b>{resources[resource]}</b></span>
+                  <span key={resource} title={resourceText(resource, language).name}><ResourceIcon resource={resource} /><b>{resources[resource]}</b></span>
                 ))}
               </div>
-              <small>Projektion {calculateProjection(state, regionId, faction)}{suspended ? ' · Ressource suspendiert' : ''}</small>
+              <small>{pick(language, 'Projektion', 'Projection')} {calculateProjection(state, regionId, faction)}{suspended ? pick(language, ' · Ressource suspendiert', ' · Resource suspended') : ''}</small>
             </div>
           )
         })}
@@ -305,6 +332,7 @@ const RegionInspector = ({ state, regionId }: { state: GameState; regionId: Regi
 }
 
 const Sidebar = ({ state }: { state: GameState }) => {
+  const language = useLanguage()
   const active = state.activeFaction
   const choke = evaluateChokepoint(state)
   const totals = (faction: FactionId) => REGION_ORDER.reduce(
@@ -322,38 +350,38 @@ const Sidebar = ({ state }: { state: GameState }) => {
   return (
     <aside className="left-sidebar">
       <section className={`command-card ${factionClass(active)}`}>
-        <span className="eyebrow">AKTIVE KOALITION</span>
-        <div className="faction-lockup"><span className="faction-seal">{FACTIONS[active].symbol}</span><div><h2>{FACTIONS[active].name}</h2><p>{state.turnIndex === 0 ? 'Erste Initiative' : 'Reaktion'} · Runde {state.round}</p></div></div>
-        <div className="ap-display" aria-label={`${state.actionPoints} Aktionspunkte verbleibend`}>
-          <span>AKTIONSPUNKTE</span>
+        <span className="eyebrow">{pick(language, 'AKTIVE KOALITION', 'ACTIVE COALITION')}</span>
+        <div className="faction-lockup"><span className="faction-seal">{factionText(active, language).symbol}</span><div><h2>{factionText(active, language).name}</h2><p>{state.turnIndex === 0 ? pick(language, 'Erste Initiative', 'First initiative') : pick(language, 'Reaktion', 'Response')} · {pick(language, 'Runde', 'Round')} {state.round}</p></div></div>
+        <div className="ap-display" aria-label={`${state.actionPoints} ${pick(language, 'Aktionspunkte verbleibend', 'action points remaining')}`}>
+          <span>{pick(language, 'AKTIONSPUNKTE', 'ACTION POINTS')}</span>
           <div>{[1, 2, 3].map((value) => <i key={value} className={value <= state.actionPoints ? 'filled' : ''}>{value <= state.actionPoints ? '●' : '○'}</i>)}</div>
         </div>
       </section>
 
       <section className="panel resource-overview">
-        <div className="panel-heading"><span>Strategische Lage</span><small>Summen auf der Karte</small></div>
+        <div className="panel-heading"><span>{pick(language, 'Strategische Lage', 'Strategic Situation')}</span><small>{pick(language, 'Summen auf der Karte', 'Map totals')}</small></div>
         {RESOURCE_ORDER.map((resource) => (
           <div className="resource-row" key={resource}>
             <span className="resource-icon"><ResourceIcon resource={resource} /></span>
-            <span>{RESOURCE_LABELS[resource].name}</span>
+            <span>{resourceText(resource, language).name}</span>
             <strong>{activeTotals[resource]}</strong>
           </div>
         ))}
-        <div className="projection-note"><span>Engpass</span><strong>{choke ? FACTIONS[choke].adjective : 'offen'}</strong></div>
+        <div className="projection-note"><span>{pick(language, 'Engpass', 'Chokepoint')}</span><strong>{choke ? factionText(choke, language).adjective : pick(language, 'offen', 'open')}</strong></div>
       </section>
 
       <section className="panel briefing">
-        <div className="panel-heading"><span>Strategischer Hinweis</span></div>
-        <p><strong>Seeverbindungen offenhalten.</strong> Präsenz allein genügt nicht: Lagebild, Zugang und Logistik tragen gemeinsam zur Projektion bei.</p>
-        <div className="formula">Präsenz + Lagebild + Zugang + Logistik = Projektion</div>
+        <div className="panel-heading"><span>{pick(language, 'Strategischer Hinweis', 'Strategic Note')}</span></div>
+        <p><strong>{pick(language, 'Seeverbindungen offenhalten.', 'Keep sea lines open.')}</strong> {pick(language, 'Präsenz allein genügt nicht: Lagebild, Zugang und Logistik tragen gemeinsam zur Projektion bei.', 'Presence alone is not enough: Awareness, Access, and Logistics all contribute to Projection.')}</p>
+        <div className="formula">{pick(language, 'Präsenz + Lagebild + Zugang + Logistik = Projektion', 'Presence + Awareness + Access + Logistics = Projection')}</div>
       </section>
 
       <section className="panel log-panel">
-        <div className="panel-heading"><span>Operationslog</span><small>letzte Meldungen</small></div>
+        <div className="panel-heading"><span>{pick(language, 'Operationslog', 'Operations Log')}</span><small>{pick(language, 'letzte Meldungen', 'latest reports')}</small></div>
         <ol>
           {state.log.slice(0, 7).map((entry) => (
             <li key={entry.id} className={entry.faction ? factionClass(entry.faction) : ''}>
-              <span>R{entry.round}</span><p>{entry.message}</p>
+              <span>R{entry.round}</span><p>{formatLogEntry(entry, language)}</p>
             </li>
           ))}
         </ol>
@@ -372,10 +400,11 @@ interface ScoreboardProps {
   onShowRules: () => void
 }
 
-const Scoreboard = ({ state, validRoutes, selectedRoute, onRouteClick, onUpgradeDetour, canUpgradeDetour, onShowRules }: ScoreboardProps) => (
-  <aside className="right-sidebar">
+const Scoreboard = ({ state, validRoutes, selectedRoute, onRouteClick, onUpgradeDetour, canUpgradeDetour, onShowRules }: ScoreboardProps) => {
+  const language = useLanguage()
+  return <aside className="right-sidebar">
     <section className="panel score-panel">
-      <div className="panel-heading"><span>Wirtschaftlicher Ertrag</span><small>nach {state.round > 1 ? `${state.round - 1} Wertungen` : 'Startlage'}</small></div>
+      <div className="panel-heading"><span>{pick(language, 'Wirtschaftlicher Ertrag', 'Economic Yield')}</span><small>{state.round > 1 ? `${pick(language, 'nach', 'after')} ${state.round - 1} ${pick(language, 'Wertungen', 'evaluations')}` : pick(language, 'Startlage', 'Initial situation')}</small></div>
       <div className="score-comparison">
         {(['blue', 'red'] as const).map((faction) => {
           const forecastAp = faction === state.activeFaction ? state.actionPoints : state.endedActionPoints[faction]
@@ -383,25 +412,25 @@ const Scoreboard = ({ state, validRoutes, selectedRoute, onRouteClick, onUpgrade
           const signed = forecast.yield >= 0 ? `+${forecast.yield}` : String(forecast.yield)
           return (
             <div className={`score-side ${factionClass(faction)}`} key={faction}>
-              <span>{FACTIONS[faction].adjective}</span>
+              <span>{factionText(faction, language).adjective}</span>
               <strong>{state.economicScore[faction]}</strong>
-              <small>Prognose {signed}{forecast.restraintBonus ? ' · Ruhe +1' : ''}</small>
+              <small>{pick(language, 'Prognose', 'Forecast')} {signed}{forecast.restraintBonus ? pick(language, ' · Ruhe +1', ' · Restraint +1') : ''}</small>
             </div>
           )
         })}
       </div>
-      <div className="score-scale"><i style={{ width: `${Math.max(0, Math.min(100, (state.economicScore.blue / 42) * 100))}%` }} /><i style={{ width: `${Math.max(0, Math.min(100, (state.economicScore.red / 42) * 100))}%` }} /></div>
-      <p className="score-caption">Nur die ertragreichste nutzbare SLOC zählt am Rundenende.</p>
+      <div className="score-scale"><i style={{ width: `${Math.max(0, Math.min(100, (state.economicScore.blue / (state.maxRounds * 7)) * 100))}%` }} /><i style={{ width: `${Math.max(0, Math.min(100, (state.economicScore.red / (state.maxRounds * 7)) * 100))}%` }} /></div>
+      <p className="score-caption">{pick(language, 'Nur die ertragreichste nutzbare SLOC zählt am Rundenende.', 'Only the highest-yield usable SLOC counts at the end of each round.')}</p>
     </section>
 
     <section className="panel routes-panel">
-      <div className="panel-heading"><span>SLOCs</span><small>Live-Prognose</small></div>
+      <div className="panel-heading"><span>SLOCs</span><small>{pick(language, 'Live-Prognose', 'Live forecast')}</small></div>
       <button className="route-rules-button" type="button" onClick={onShowRules}>
-        <span>?</span> Wann ist ein Seeweg frei, unter Druck oder zu?
+        <span>?</span> {pick(language, 'Wann ist ein Seeweg frei, unter Druck oder zu?', 'When is a sea line open, contested, or closed?')}
       </button>
       <div className="route-list">
         {ROUTE_ORDER.map((routeId) => {
-          const route = ROUTES[routeId]
+          const route = routeText(routeId, language)
           const result = calculateRouteYield(state, routeId)
           const valid = validRoutes.includes(routeId)
           return (
@@ -414,33 +443,34 @@ const Scoreboard = ({ state, validRoutes, selectedRoute, onRouteClick, onUpgrade
             >
               <span className="route-line-icon">{route.kind === 'main' ? '━' : '┄'}</span>
               <span>
-                <strong>{route.name.replace(/^(Blaue|Rote) /, '')} · Kapazität {state.routeCapacity[routeId]}</strong>
-                <small>{result.blocked ? result.reason : `${result.contestedRegions} unter Druck · Esk −${result.escalationPenalty + result.responsibilityPenalty}`}</small>
+                <strong>{language === 'de' ? route.name.replace(/^(Blaue|Rote) /, '') : route.name.replace(/^(Blue|Red) /, '')} · {pick(language, 'Kapazität', 'Capacity')} {state.routeCapacity[routeId]}</strong>
+                <small>{result.blocked ? formatYieldReason(result, language) : `${result.contestedRegions} ${pick(language, 'unter Druck', 'contested')} · Esc −${result.escalationPenalty + result.responsibilityPenalty}`}</small>
               </span>
-              <b className={result.blocked ? 'blocked' : ''}>{result.blocked ? 'ZU' : `+${result.yield}`}</b>
+              <b className={result.blocked ? 'blocked' : ''}>{result.blocked ? pick(language, 'ZU', 'CLOSED') : `+${result.yield}`}</b>
             </button>
           )
         })}
       </div>
       <button className="detour-upgrade-button" type="button" onClick={onUpgradeDetour} disabled={!canUpgradeDetour}>
-        Ausweich-SLOC ausbauen · 2 AP
-        <small>dauerhaft +1 · maximal 5 · einmal je Runde</small>
+        {pick(language, 'Ausweich-SLOC ausbauen', 'Upgrade Detour SLOC')} · 2 AP
+        <small>{pick(language, 'dauerhaft +1 · maximal 5 · einmal je Runde', 'permanent +1 · maximum 5 · once per round')}</small>
       </button>
     </section>
 
     <section className="panel round-track">
-      <div className="panel-heading"><span>Runde</span></div>
+      <div className="panel-heading"><span>{pick(language, 'Runde', 'Round')}</span></div>
       <div className="round-dots">
-        {Array.from({ length: constants.MAX_ROUNDS }, (_, index) => index + 1).map((round) => (
+        {Array.from({ length: state.maxRounds }, (_, index) => index + 1).map((round) => (
           <span key={round} className={round < state.round ? 'complete' : round === state.round ? 'current' : ''}>{round}</span>
         ))}
       </div>
-      <p>{state.phase === 'complete' ? 'Partie beendet' : `Runde ${state.round} von ${constants.MAX_ROUNDS}`}</p>
+      <p>{state.phase === 'complete' ? pick(language, 'Partie beendet', 'Game complete') : `${pick(language, 'Runde', 'Round')} ${state.round} ${pick(language, 'von', 'of')} ${state.maxRounds}`}</p>
     </section>
   </aside>
-)
+}
 
 const RouteRulesDialog = ({ onClose }: { onClose: () => void }) => {
+  const language = useLanguage()
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose()
@@ -459,52 +489,53 @@ const RouteRulesDialog = ({ onClose }: { onClose: () => void }) => {
     >
       <section className="route-rules-dialog">
         <header>
-          <div><span className="eyebrow">REGELHILFE · SLOCs</span><h2 id="route-rules-title">Wann ist eine SLOC nutzbar?</h2></div>
-          <button type="button" onClick={onClose} aria-label="Regelhilfe schließen">×</button>
+          <div><span className="eyebrow">{pick(language, 'REGELHILFE · SLOCs', 'RULES · SLOCs')}</span><h2 id="route-rules-title">{pick(language, 'Wann ist eine SLOC nutzbar?', 'When is a SLOC usable?')}</h2></div>
+          <button type="button" onClick={onClose} aria-label={pick(language, 'Regelhilfe schließen', 'Close rules')}>×</button>
         </header>
 
         <div className="projection-explainer">
-          <span>Berechnung je Region und Seite</span>
-          <strong>Präsenz + Lagebild + Zugang + Logistik = Projektion</strong>
-          <p>Die eigene Projektion wird immer mit der gegnerischen Projektion in derselben Region verglichen.</p>
+          <span>{pick(language, 'Berechnung je Region und Seite', 'Calculated for each region and side')}</span>
+          <strong>{pick(language, 'Präsenz + Lagebild + Zugang + Logistik = Projektion', 'Presence + Awareness + Access + Logistics = Projection')}</strong>
+          <p>{pick(language, 'Die eigene Projektion wird immer mit der gegnerischen Projektion in derselben Region verglichen.', 'Your Projection is always compared with opposing Projection in the same region.')}</p>
         </div>
 
         <div className="route-status-grid">
           <article className="status-free">
-            <div><i /> <strong>Frei nutzbar</strong></div>
-            <p>Deine Projektion ist mindestens so hoch wie die gegnerische.</p>
-            <small>Die Region verursacht keinen zusätzlichen SLOC-Malus.</small>
+            <div><i /> <strong>{pick(language, 'Frei nutzbar', 'Open')}</strong></div>
+            <p>{pick(language, 'Deine Projektion ist mindestens so hoch wie die gegnerische.', 'Your Projection is at least as high as opposing Projection.')}</p>
+            <small>{pick(language, 'Die Region verursacht keinen zusätzlichen SLOC-Malus.', 'The region causes no additional SLOC penalty.')}</small>
           </article>
           <article className="status-contested">
-            <div><i /> <strong>Unter Druck</strong></div>
-            <p>Deine Projektion liegt genau 1 oder 2 Punkte hinter der gegnerischen.</p>
-            <small>Der Seeweg bleibt offen, verliert aber je betroffener Region 1 Ertrag.</small>
+            <div><i /> <strong>{pick(language, 'Unter Druck', 'Contested')}</strong></div>
+            <p>{pick(language, 'Deine Projektion liegt genau 1 oder 2 Punkte hinter der gegnerischen.', 'Your Projection is exactly 1 or 2 points below opposing Projection.')}</p>
+            <small>{pick(language, 'Der Seeweg bleibt offen, verliert aber je betroffener Region 1 Ertrag.', 'The sea line remains open but loses 1 Yield for each affected region.')}</small>
           </article>
           <article className="status-denied">
-            <div><i /> <strong>Verwehrt / zu</strong></div>
-            <p>Deine Projektion liegt mindestens 3 Punkte hinter der gegnerischen.</p>
-            <small>Jede SLOC durch diese Region ist für dich geschlossen.</small>
+            <div><i /> <strong>{pick(language, 'Verwehrt / zu', 'Denied / closed')}</strong></div>
+            <p>{pick(language, 'Deine Projektion liegt mindestens 3 Punkte hinter der gegnerischen.', 'Your Projection is at least 3 points below opposing Projection.')}</p>
+            <small>{pick(language, 'Jede SLOC durch diese Region ist für dich geschlossen.', 'Every SLOC crossing this region is closed to you.')}</small>
           </article>
         </div>
 
         <div className="closure-rules">
-          <h3>Eine SLOC ist außerdem geschlossen, wenn …</h3>
+          <h3>{pick(language, 'Eine SLOC ist außerdem geschlossen, wenn …', 'A SLOC is also closed when …')}</h3>
           <ul>
-            <li>am Ausgangsraum oder am Freihafen kein eigener aktiver Zugang mehr besteht,</li>
-            <li>mindestens eine durchquerte Region für die Seite verwehrt ist, oder</li>
-            <li>die gegnerische Seite die Meridianstraße kontrolliert – dies betrifft nur die Haupt-SLOC.</li>
+            <li>{pick(language, 'am Ausgangsraum oder am Freihafen kein eigener aktiver Zugang mehr besteht,', 'there is no active friendly Access at the origin or Freeport,')}</li>
+            <li>{pick(language, 'mindestens eine durchquerte Region für die Seite verwehrt ist, oder', 'at least one traversed region is denied to the side, or')}</li>
+            <li>{pick(language, 'die gegnerische Seite die Meridianstraße kontrolliert – dies betrifft nur die Haupt-SLOC.', 'the opposing side controls Meridian Strait – this only affects the Main SLOC.')}</li>
           </ul>
         </div>
 
         <div className="rules-notes">
-          <p><strong>Engpasskontrolle:</strong> mindestens 2 Punkte Projektionsvorsprung sowie 2 Präsenz und 1 Zugang in der Meridianstraße. Die Ausweich-SLOC bleibt möglich.</p>
-          <p><strong>Eskalation:</strong> verändert nicht den Status „frei/zu“, reduziert aber zusätzlich den wirtschaftlichen Ertrag einer weiterhin nutzbaren SLOC.</p>
-          <p><strong>Konvoisicherung:</strong> hebt bei der nächsten Wertung genau einen „unter Druck“-Malus auf.</p>
-          <p><strong>Ausbau:</strong> Für 2 AP steigt die eigene Ausweich-SLOC einmal je Runde dauerhaft um 1, bis maximal Kapazität 5.</p>
-          <p><strong>Kontrollverlust:</strong> Eskalation 8 erzeugt unabhängig vom Seeweg −1 Ertrag, bei eigener Eskalationsverantwortung −2.</p>
+          <p><strong>{pick(language, 'Engpasskontrolle:', 'Chokepoint control:')}</strong> {pick(language, 'mindestens 2 Punkte Projektionsvorsprung sowie 2 Präsenz und 1 Zugang in der Meridianstraße. Die Ausweich-SLOC bleibt möglich.', 'at least a 2-point Projection lead plus 2 Presence and 1 Access in Meridian Strait. The Detour SLOC remains available.')}</p>
+          <p><strong>{pick(language, 'Präsenz und Lagebild:', 'Presence and Awareness:')}</strong> {pick(language, 'Vorausstationierung verbessert zusätzlich das Lagebild bis maximal 2. Bloßes Verlegen vorhandener Präsenz tut dies nicht.', 'Forward Deployment also improves Awareness up to 2. Merely moving existing Presence does not.')}</p>
+          <p><strong>{pick(language, 'Eskalation:', 'Escalation:')}</strong> {pick(language, 'verändert nicht den Status „frei/zu“, reduziert aber zusätzlich den wirtschaftlichen Ertrag einer weiterhin nutzbaren SLOC.', 'does not change open/closed status, but further reduces the economic Yield of an otherwise usable SLOC.')}</p>
+          <p><strong>{pick(language, 'Konvoisicherung:', 'Convoy Escort:')}</strong> {pick(language, 'hebt bei der nächsten Wertung genau einen „unter Druck“-Malus auf.', 'removes exactly one contested penalty during the next evaluation.')}</p>
+          <p><strong>{pick(language, 'Ausbau:', 'Upgrade:')}</strong> {pick(language, 'Für 2 AP steigt die eigene Ausweich-SLOC einmal je Runde dauerhaft um 1, bis maximal Kapazität 5.', 'For 2 AP, your Detour SLOC permanently gains 1 capacity once per round, up to 5.')}</p>
+          <p><strong>{pick(language, 'Kontrollverlust:', 'Loss of Control:')}</strong> {pick(language, 'Eskalation 8 erzeugt unabhängig vom Seeweg −1 Ertrag, bei eigener Eskalationsverantwortung −2.', 'Escalation 8 causes −1 Yield regardless of sea-line status, or −2 if the faction generated Escalation that round.')}</p>
         </div>
 
-        <footer><button className="confirm-button" type="button" onClick={onClose}>Verstanden</button></footer>
+        <footer><button className="confirm-button" type="button" onClick={onClose}>{pick(language, 'Verstanden', 'Understood')}</button></footer>
       </section>
     </div>
   )
@@ -529,6 +560,7 @@ interface HandProps {
 }
 
 const CardHand = ({ state, selected, selectedRegions, selectedRoute, hybridResource, covert, error, onSelect, onResource, onCovert, onConfirm, onCancel, onEndTurn, locked = false, waitMessage }: HandProps) => {
+  const language = useLanguage()
   const faction = state.activeFaction
   const hoverTimer = useRef<ReturnType<typeof window.setTimeout> | null>(null)
   const [tooltip, setTooltip] = useState<{
@@ -537,7 +569,7 @@ const CardHand = ({ state, selected, selectedRegions, selectedRoute, hybridResou
     top: number
     insufficientAp: boolean
   }>()
-  const card = selected ? CARDS[selected.cardId] : undefined
+  const card = selected ? cardText(selected.cardId, language) : undefined
   const play: CardPlay | undefined = selected ? { instanceId: selected.instanceId, regions: selectedRegions, routeId: selectedRoute, resource: hybridResource, covert } : undefined
   const totalCost = card ? card.cost + (covert ? 1 : 0) : 0
   const ready = card && play ? isPlayReady(card.id, play) && totalCost <= state.actionPoints : false
@@ -574,14 +606,14 @@ const CardHand = ({ state, selected, selectedRegions, selectedRoute, hybridResou
       <section className={`hand-panel ${factionClass(faction)} is-locked`}>
         <div className="action-composer waiting-composer">
           <div className="composer-copy">
-            <span className="eyebrow">LAGEAKTUALISIERUNG</span>
-            <strong>{waitMessage ?? `${FACTIONS[faction].name} ist am Zug.`}</strong>
+            <span className="eyebrow">{pick(language, 'LAGEAKTUALISIERUNG', 'SITUATION UPDATE')}</span>
+            <strong>{waitMessage ?? `${factionText(faction, language).name} ${pick(language, 'ist am Zug.', 'is taking its turn.')}`}</strong>
           </div>
           <span className="waiting-signal" aria-hidden="true"><i /><i /><i /></span>
         </div>
         <div className="waiting-hand">
           <span className="waiting-emblem">✦</span>
-          <div><strong>Gegnerische Befehlshand bleibt verdeckt</strong><p>Die Lagekarte wird nach jeder bestätigten Aktion automatisch aktualisiert.</p></div>
+          <div><strong>{pick(language, 'Gegnerische Befehlshand bleibt verdeckt', 'Opposing command hand remains hidden')}</strong><p>{pick(language, 'Die Lagekarte wird nach jeder bestätigten Aktion automatisch aktualisiert.', 'The situation map updates automatically after each confirmed action.')}</p></div>
         </div>
       </section>
     )
@@ -591,35 +623,35 @@ const CardHand = ({ state, selected, selectedRegions, selectedRoute, hybridResou
     <section className={`hand-panel ${factionClass(faction)}`}>
       <div className="action-composer">
         <div className="composer-copy">
-          <span className="eyebrow">{card ? `BEFEHL · ${card.domain}` : 'BEFEHLSHAND'}</span>
-          <strong>{card ? card.instruction : 'Karte wählen und Wirkung auf der Lagekarte platzieren.'}</strong>
-          {!card && state.covertOperations.some((entry) => entry.faction === faction) && <small>Eine eigene verdeckte Operation ist für die nächste Wertung vorbereitet.</small>}
-          {error && <small className="action-error">{error}</small>}
+          <span className="eyebrow">{card ? `${pick(language, 'BEFEHL', 'COMMAND')} · ${card.domain}` : pick(language, 'BEFEHLSHAND', 'COMMAND HAND')}</span>
+          <strong>{card ? card.instruction : pick(language, 'Karte wählen und Wirkung auf der Lagekarte platzieren.', 'Select a card and place its effect on the situation map.')}</strong>
+          {!card && state.covertOperations.some((entry) => entry.faction === faction) && <small>{pick(language, 'Eine eigene verdeckte Operation ist für die nächste Wertung vorbereitet.', 'One friendly covert operation is prepared for the next evaluation.')}</small>}
+          {error && <small className="action-error">{formatError(error, language)}</small>}
         </div>
         {card && (
           <div className="target-summary">
             {COVERT_CARD_IDS.includes(card.id) && (
               <button className={covert ? 'covert-active' : ''} type="button" onClick={() => onCovert(!covert)} disabled={!covert && card.cost + 1 > state.actionPoints}>
-                {covert ? 'Verdeckt · Wirkung zur Wertung' : 'Offen spielen'}
+                {covert ? pick(language, 'Verdeckt · Wirkung zur Wertung', 'Covert · resolves at evaluation') : pick(language, 'Offen spielen', 'Play openly')}
               </button>
             )}
-            {selectedRegions.map((id, index) => <span key={`${id}-${index}`}>{index + 1}. {REGIONS[id].shortName}</span>)}
-            {selectedRoute && <span>{ROUTES[selectedRoute].name}</span>}
+            {selectedRegions.map((id, index) => <span key={`${id}-${index}`}>{index + 1}. {regionText(id, language).shortName}</span>)}
+            {selectedRoute && <span>{routeText(selectedRoute, language).name}</span>}
             {hybridOptions.length > 0 && !hybridResource && hybridOptions.map((resource) => (
-              <button type="button" key={resource} onClick={() => onResource(resource)}>{RESOURCE_LABELS[resource].name} wählen</button>
+              <button type="button" key={resource} onClick={() => onResource(resource)}>{resourceText(resource, language).name} {pick(language, 'wählen', 'select')}</button>
             ))}
-            {hybridResource && <span>{RESOURCE_LABELS[hybridResource].name}</span>}
+            {hybridResource && <span>{resourceText(hybridResource, language).name}</span>}
           </div>
         )}
         <div className="composer-actions">
-          {card && <button className="ghost-button" type="button" onClick={onCancel}>Abbrechen</button>}
-          {card && <button className="confirm-button" type="button" disabled={!ready} onClick={onConfirm}>Für {totalCost} AP {covert ? 'vorbereiten' : 'ausspielen'}</button>}
-          <button className="end-turn-button" type="button" onClick={onEndTurn}>Zug beenden <span>→</span></button>
+          {card && <button className="ghost-button" type="button" onClick={onCancel}>{pick(language, 'Abbrechen', 'Cancel')}</button>}
+          {card && <button className="confirm-button" type="button" disabled={!ready} onClick={onConfirm}>{pick(language, 'Für', 'For')} {totalCost} AP {covert ? pick(language, 'vorbereiten', 'prepare') : pick(language, 'ausspielen', 'play')}</button>}
+          <button className="end-turn-button" type="button" onClick={onEndTurn}>{pick(language, 'Zug beenden', 'End turn')} <span>→</span></button>
         </div>
       </div>
-      <div className="cards-row" aria-label={`Kartenhand ${FACTIONS[faction].name}`}>
+      <div className="cards-row" aria-label={`${pick(language, 'Kartenhand', 'Card hand')} ${factionText(faction, language).name}`}>
         {state.hands[faction].map((instance) => {
-          const definition = CARDS[instance.cardId]
+          const definition = cardText(instance.cardId, language)
           const disabled = definition.cost > state.actionPoints || (definition.id === 'deescalation_channel' && state.escalation === 0)
           return (
             <button
@@ -644,10 +676,10 @@ const CardHand = ({ state, selected, selectedRegions, selectedRoute, hybridResou
             </button>
           )
         })}
-        {state.hands[faction].length === 0 && <div className="empty-hand">Keine Karten auf der Hand.</div>}
+        {state.hands[faction].length === 0 && <div className="empty-hand">{pick(language, 'Keine Karten auf der Hand.', 'No cards in hand.')}</div>}
       </div>
       {tooltip && createPortal((() => {
-        const definition = CARDS[tooltip.card.cardId]
+        const definition = cardText(tooltip.card.cardId, language)
         return (
           <aside
             id={`card-help-${tooltip.card.instanceId}`}
@@ -659,16 +691,16 @@ const CardHand = ({ state, selected, selectedRegions, selectedRoute, hybridResou
               <span><CardIcon cardId={definition.id} /></span>
               <div><small>{definition.domain} · {definition.cost} AP</small><strong>{definition.title}</strong></div>
             </div>
-            <div className="hover-help-section"><b>Wirkung</b><p>{definition.description}</p></div>
-            <div className="hover-help-section"><b>Wann &amp; wo?</b><p>{definition.playHint}</p></div>
+            <div className="hover-help-section"><b>{pick(language, 'Wirkung', 'Effect')}</b><p>{definition.description}</p></div>
+            <div className="hover-help-section"><b>{pick(language, 'Wann & wo?', 'When & where?')}</b><p>{definition.playHint}</p></div>
             {definition.escalation > 0 && (
               <div className="hover-help-escalation">
-                <b>Eskalationsrisiko +{definition.escalation}</b>
+                <b>{pick(language, 'Eskalationsrisiko', 'Escalation risk')} +{definition.escalation}</b>
                 <p>{definition.escalationReason}</p>
               </div>
             )}
-            {COVERT_CARD_IDS.includes(definition.id) && <div className="hover-help-section"><b>Verdeckte Variante</b><p>Für +1 AP verzögert und ohne Eskalationsanstieg, wenn eigenes Lagebild mindestens 1 und gegnerisches höchstens 1 beträgt.</p></div>}
-            {tooltip.insufficientAp && <div className="hover-help-warning">Aktuell fehlen Aktionspunkte: benötigt {definition.cost}, verfügbar {state.actionPoints}.</div>}
+            {COVERT_CARD_IDS.includes(definition.id) && <div className="hover-help-section"><b>{pick(language, 'Verdeckte Variante', 'Covert variant')}</b><p>{pick(language, 'Für +1 AP verzögert und ohne Eskalationsanstieg, wenn eigenes Lagebild mindestens 1 und gegnerisches höchstens 1 beträgt.', 'For +1 AP, delayed and without increasing Escalation, if friendly Awareness is at least 1 and opposing Awareness is at most 1.')}</p></div>}
+            {tooltip.insufficientAp && <div className="hover-help-warning">{pick(language, 'Aktuell fehlen Aktionspunkte:', 'Insufficient action points:')} {pick(language, 'benötigt', 'required')} {definition.cost}, {pick(language, 'verfügbar', 'available')} {state.actionPoints}.</div>}
           </aside>
         )
       })(), document.body)}
@@ -677,6 +709,7 @@ const CardHand = ({ state, selected, selectedRegions, selectedRoute, hybridResou
 }
 
 const EndGameDialog = ({ state, onRestart, actionLabel = 'Neue Partie beginnen' }: { state: GameState; onRestart: () => void; actionLabel?: string }) => {
+  const language = useLanguage()
   if (state.phase !== 'complete' || !state.winner) return null
   const winner = state.winner.faction
   const ratings = (['blue', 'red'] as const).map((faction) => calculateLeadershipRating(state, faction))
@@ -684,21 +717,21 @@ const EndGameDialog = ({ state, onRestart, actionLabel = 'Neue Partie beginnen' 
     <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="result-title">
       <div className={`result-dialog ${winner ? factionClass(winner) : ''}`}>
         <span className="result-compass">✦</span>
-        <span className="eyebrow">SECHSTE WIRTSCHAFTSAUSWERTUNG</span>
-        <h2 id="result-title">{winner ? `${FACTIONS[winner].name} setzt sich durch` : 'Strategisches Gleichgewicht'}</h2>
-        <p>{state.winner.reason}</p>
+        <span className="eyebrow">{state.maxRounds}. {pick(language, 'WIRTSCHAFTSAUSWERTUNG', 'ECONOMIC EVALUATION')}</span>
+        <h2 id="result-title">{winner ? `${factionText(winner, language).name} ${pick(language, 'setzt sich durch', 'prevails')}` : pick(language, 'Strategisches Gleichgewicht', 'Strategic Balance')}</h2>
+        <p>{formatWinnerReason(state.winner, language)}</p>
         <div className="final-scores">
-          <div className="is-blue"><span>Blau</span><strong>{state.economicScore.blue}</strong></div>
+          <div className="is-blue"><span>{factionText('blue', language).adjective}</span><strong>{state.economicScore.blue}</strong></div>
           <i>:</i>
-          <div className="is-red"><span>Rot</span><strong>{state.economicScore.red}</strong></div>
+          <div className="is-red"><span>{factionText('red', language).adjective}</span><strong>{state.economicScore.red}</strong></div>
         </div>
         <div className="leadership-ratings">
           {ratings.map((rating) => (
             <article className={factionClass(rating.faction)} key={rating.faction}>
-              <span>{FACTIONS[rating.faction].name}</span>
-              <strong aria-label={`${rating.stars} von 5 Sternen`}>{'★'.repeat(rating.stars)}{'☆'.repeat(5 - rating.stars)}</strong>
-              <b>{rating.label}</b>
-              <small>Ergebnis {rating.components.result}/4 · Wirtschaft {rating.components.economy}/2 · Eskalation {rating.components.escalation}/2 · Verantwortung {rating.components.responsibility}/2</small>
+              <span>{factionText(rating.faction, language).name}</span>
+              <strong aria-label={`${rating.stars} ${pick(language, 'von 5 Sternen', 'of 5 stars')}`}>{'★'.repeat(rating.stars)}{'☆'.repeat(5 - rating.stars)}</strong>
+              <b>{leadershipLabel(rating.stars, language)}</b>
+              <small>{pick(language, 'Ergebnis', 'Result')} {rating.components.result}/4 · {pick(language, 'Wirtschaft', 'Economy')} {rating.components.economy}/2 · {pick(language, 'Eskalation', 'Escalation')} {rating.components.escalation}/2 · {pick(language, 'Verantwortung', 'Responsibility')} {rating.components.responsibility}/2</small>
             </article>
           ))}
         </div>
@@ -709,6 +742,10 @@ const EndGameDialog = ({ state, onRestart, actionLabel = 'Neue Partie beginnen' 
 }
 
 interface ModeSelectionProps {
+  language: Language
+  onLanguage: (language: Language) => void
+  rounds: RoundCount
+  onRounds: (rounds: RoundCount) => void
   busy: boolean
   error?: string
   hasSavedSingleGame: boolean
@@ -721,7 +758,7 @@ interface ModeSelectionProps {
   onResumeRoom: (session: OnlineSession) => void
 }
 
-const ModeSelection = ({ busy, error, hasSavedSingleGame, hasSavedLocalGame, savedOnlineSession, onSingleplayer, onLocalPvp, onCreateRoom, onJoinRoom, onResumeRoom }: ModeSelectionProps) => {
+const ModeSelection = ({ language, onLanguage, rounds, onRounds, busy, error, hasSavedSingleGame, hasSavedLocalGame, savedOnlineSession, onSingleplayer, onLocalPvp, onCreateRoom, onJoinRoom, onResumeRoom }: ModeSelectionProps) => {
   const queryRoom = new URLSearchParams(window.location.search).get('room') ?? ''
   const [joinCode, setJoinCode] = useState(queryRoom.toUpperCase())
 
@@ -730,74 +767,91 @@ const ModeSelection = ({ busy, error, hasSavedSingleGame, hasSavedLocalGame, sav
       <div className="mode-backdrop" aria-hidden="true"><i /><i /><i /></div>
       <header className="mode-brand">
         <span className="mode-brand-mark">✦</span>
-        <div><span>SEA LINES OF</span><strong>COMMUNICATION</strong><small>MVP 4 · Resilienz, Grauzone und drei Spielmodi</small></div>
+        <div><span>SEA LINES OF</span><strong>COMMUNICATION</strong><small>{pick(language, 'MVP 5 · Sprache, Einsatzdauer und Aufklärung', 'MVP 5 · Language, campaign length, and awareness')}</small></div>
       </header>
       <section className="mode-intro">
-        <span className="eyebrow">EINSATZBEREITSCHAFT HERSTELLEN</span>
-        <h1>Wie möchtest du spielen?</h1>
-        <p>Spiele gegen die KI, gemeinsam an einem Gerät oder online. Kartenhände und verdeckte Operationen bleiben in beiden PvP-Modi geschützt.</p>
+        <span className="eyebrow">{pick(language, 'EINSATZBEREITSCHAFT HERSTELLEN', 'ESTABLISH READINESS')}</span>
+        <h1>{pick(language, 'Wie möchtest du spielen?', 'How would you like to play?')}</h1>
+        <p>{pick(language, 'Spiele gegen die KI, gemeinsam an einem Gerät oder online. Kartenhände und verdeckte Operationen bleiben in beiden PvP-Modi geschützt.', 'Play against the AI, together on one device, or online. Hands and covert operations remain protected in both PvP modes.')}</p>
       </section>
-      <section className="mode-options" aria-label="Spielmodus wählen">
+      <section className="mode-settings" aria-label={pick(language, 'Spieleinstellungen', 'Game settings')}>
+        <div>
+          <span>{pick(language, 'SPRACHE', 'LANGUAGE')}</span>
+          <div className="segmented-control">
+            <button type="button" className={language === 'de' ? 'active' : ''} onClick={() => onLanguage('de')}>Deutsch</button>
+            <button type="button" className={language === 'en' ? 'active' : ''} onClick={() => onLanguage('en')}>English</button>
+          </div>
+        </div>
+        <div>
+          <span>{pick(language, 'RUNDEN', 'ROUNDS')}</span>
+          <div className="segmented-control">
+            {constants.ROUND_OPTIONS.map((value) => <button type="button" key={value} className={rounds === value ? 'active' : ''} onClick={() => onRounds(value)}>{value}</button>)}
+          </div>
+          <small>{pick(language, 'Gilt für neu gestartete Partien; 6 ist das Minimum.', 'Applies to newly started games; 6 is the minimum.')}</small>
+        </div>
+      </section>
+      <section className="mode-options" aria-label={pick(language, 'Spielmodus wählen', 'Choose game mode')}>
         <article className="mode-card single-mode">
           <span className="mode-number">01</span>
           <div className="mode-icon" aria-hidden="true">♟</div>
-          <span className="eyebrow">EINZELSPIELER</span>
-          <h2>Blau gegen Rote KI</h2>
-          <p>Du führst die Blaue Koalition. Die KI bewertet Routen, Projektion und Eskalationsrisiko und spielt ihre Züge selbstständig.</p>
-          <ul><li>sofort spielbar</li><li>lokal gespeichert</li><li>sichtbare KI-Züge</li></ul>
+          <span className="eyebrow">{pick(language, 'EINZELSPIELER', 'SINGLE PLAYER')}</span>
+          <h2>{pick(language, 'Blau gegen Rote KI', 'Blue vs Red AI')}</h2>
+          <p>{pick(language, 'Du führst die Blaue Koalition. Die KI bewertet Routen, Projektion und Eskalationsrisiko und spielt ihre Züge selbstständig.', 'You lead the Blue Coalition. The AI evaluates routes, Projection, and Escalation risk and plays its turns independently.')}</p>
+          <ul><li>{pick(language, 'sofort spielbar', 'play immediately')}</li><li>{pick(language, 'lokal gespeichert', 'saved locally')}</li><li>{pick(language, 'sichtbare KI-Züge', 'visible AI turns')}</li></ul>
           <button className="mode-primary" type="button" disabled={busy} onClick={() => onSingleplayer(!hasSavedSingleGame)}>
-            {hasSavedSingleGame ? 'Einzelspieler fortsetzen' : 'Einzelspieler starten'} <span>→</span>
+            {hasSavedSingleGame ? pick(language, 'Einzelspieler fortsetzen', 'Continue single player') : pick(language, 'Einzelspieler starten', 'Start single player')} <span>→</span>
           </button>
-          {hasSavedSingleGame && <button className="mode-text-button" type="button" disabled={busy} onClick={() => onSingleplayer(true)}>Neue Einzelpartie</button>}
+          {hasSavedSingleGame && <button className="mode-text-button" type="button" disabled={busy} onClick={() => onSingleplayer(true)}>{pick(language, 'Neue Einzelpartie', 'New single-player game')}</button>}
         </article>
 
         <article className="mode-card local-mode">
           <span className="mode-number">02</span>
           <div className="mode-icon" aria-hidden="true">⇄</div>
-          <span className="eyebrow">LOKALES PVP</span>
+          <span className="eyebrow">{pick(language, 'LOKALES PVP', 'LOCAL PVP')}</span>
           <h2>Pass-and-play</h2>
-          <p>Blau und Rot teilen sich ein Gerät. Ein Übergabebildschirm schützt Hände und vorbereitete Operationen vor der jeweils anderen Seite.</p>
-          <ul><li>kein Netzwerk nötig</li><li>separat gespeichert</li><li>verdeckte Hände</li></ul>
+          <p>{pick(language, 'Blau und Rot teilen sich ein Gerät. Ein Übergabebildschirm schützt Hände und vorbereitete Operationen vor der jeweils anderen Seite.', 'Blue and Red share one device. A handoff screen protects hands and prepared operations from the other side.')}</p>
+          <ul><li>{pick(language, 'kein Netzwerk nötig', 'no network required')}</li><li>{pick(language, 'separat gespeichert', 'saved separately')}</li><li>{pick(language, 'verdeckte Hände', 'hidden hands')}</li></ul>
           <button className="mode-primary" type="button" disabled={busy} onClick={() => onLocalPvp(!hasSavedLocalGame)}>
-            {hasSavedLocalGame ? 'Lokale Partie fortsetzen' : 'Lokale Partie starten'} <span>→</span>
+            {hasSavedLocalGame ? pick(language, 'Lokale Partie fortsetzen', 'Continue local game') : pick(language, 'Lokale Partie starten', 'Start local game')} <span>→</span>
           </button>
-          {hasSavedLocalGame && <button className="mode-text-button" type="button" disabled={busy} onClick={() => onLocalPvp(true)}>Neue lokale Partie</button>}
+          {hasSavedLocalGame && <button className="mode-text-button" type="button" disabled={busy} onClick={() => onLocalPvp(true)}>{pick(language, 'Neue lokale Partie', 'New local game')}</button>}
         </article>
 
         <article className="mode-card online-mode">
           <span className="mode-number">03</span>
           <div className="mode-icon" aria-hidden="true">◎</div>
-          <span className="eyebrow">ONLINE-MULTIPLAYER</span>
-          <h2>Blau gegen Rot</h2>
-          <p>Eröffne einen privaten Spielraum oder tritt mit einem sechsstelligen Code bei. Cloudflare synchronisiert und prüft alle Aktionen.</p>
+          <span className="eyebrow">{pick(language, 'ONLINE-MULTIPLAYER', 'ONLINE MULTIPLAYER')}</span>
+          <h2>{pick(language, 'Blau gegen Rot', 'Blue vs Red')}</h2>
+          <p>{pick(language, 'Eröffne einen privaten Spielraum oder tritt mit einem sechsstelligen Code bei. Cloudflare synchronisiert und prüft alle Aktionen.', 'Open a private game room or join with a six-character code. Cloudflare synchronizes and validates every action.')}</p>
           <div className="online-actions">
-            <button className="mode-primary" type="button" disabled={busy} onClick={onCreateRoom}>Raum eröffnen <span>→</span></button>
+            <button className="mode-primary" type="button" disabled={busy} onClick={onCreateRoom}>{pick(language, 'Raum eröffnen', 'Open room')} <span>→</span></button>
             <div className="join-row">
               <input
                 value={joinCode}
                 onChange={(event) => setJoinCode(event.target.value.replace(/[^a-z0-9]/gi, '').toUpperCase().slice(0, 6))}
-                placeholder="RAUMCODE"
-                aria-label="Sechsstelliger Raumcode"
+                placeholder={pick(language, 'RAUMCODE', 'ROOM CODE')}
+                aria-label={pick(language, 'Sechsstelliger Raumcode', 'Six-character room code')}
                 maxLength={6}
               />
-              <button type="button" disabled={busy || joinCode.length !== 6} onClick={() => onJoinRoom(joinCode)}>Beitreten</button>
+              <button type="button" disabled={busy || joinCode.length !== 6} onClick={() => onJoinRoom(joinCode)}>{pick(language, 'Beitreten', 'Join')}</button>
             </div>
           </div>
           {savedOnlineSession && (
             <button className="resume-room" type="button" disabled={busy} onClick={() => onResumeRoom(savedOnlineSession)}>
-              Raum {savedOnlineSession.roomCode} als {FACTIONS[savedOnlineSession.faction].adjective} fortsetzen
+              {pick(language, 'Raum', 'Room')} {savedOnlineSession.roomCode} {pick(language, 'als', 'as')} {factionText(savedOnlineSession.faction, language).adjective} {pick(language, 'fortsetzen', 'continue')}
             </button>
           )}
         </article>
       </section>
-      {busy && <div className="mode-status"><span className="waiting-signal"><i /><i /><i /></span> Verbindung wird hergestellt …</div>}
-      {error && <div className="mode-error" role="alert">{error}</div>}
-      <footer className="mode-footer"><span>6 Runden</span><i /> <span>Keine Registrierung</span><i /> <span>Private Raumcodes</span></footer>
+      {busy && <div className="mode-status"><span className="waiting-signal"><i /><i /><i /></span> {pick(language, 'Verbindung wird hergestellt …', 'Establishing connection …')}</div>}
+      {error && <div className="mode-error" role="alert">{formatError(error, language)}</div>}
+      <footer className="mode-footer"><span>{rounds} {pick(language, 'Runden', 'Rounds')}</span><i /> <span>{pick(language, 'Keine Registrierung', 'No registration')}</span><i /> <span>{pick(language, 'Private Raumcodes', 'Private room codes')}</span></footer>
     </main>
   )
 }
 
 const OnlineLobby = ({ session, snapshot, connection, onLeave }: { session: OnlineSession; snapshot?: RoomSnapshot; connection: ConnectionStatus; onLeave: () => void }) => {
+  const language = useLanguage()
   const [copied, setCopied] = useState(false)
   const inviteUrl = `${window.location.origin}${window.location.pathname}?room=${session.roomCode}`
   const copyInvite = async () => {
@@ -809,36 +863,39 @@ const OnlineLobby = ({ session, snapshot, connection, onLeave }: { session: Onli
     <main className="mode-screen lobby-screen">
       <header className="mode-brand compact"><span className="mode-brand-mark">✦</span><div><span>SEA LINES OF</span><strong>COMMUNICATION</strong></div></header>
       <section className="lobby-card">
-        <span className="eyebrow">PRIVATER SPIELRAUM</span>
-        <h1>{snapshot?.status === 'waiting' ? 'Warten auf Rot' : 'Verbindung wird hergestellt'}</h1>
+        <span className="eyebrow">{pick(language, 'PRIVATER SPIELRAUM', 'PRIVATE GAME ROOM')}</span>
+        <h1>{snapshot?.status === 'waiting' ? pick(language, 'Warten auf Rot', 'Waiting for Red') : pick(language, 'Verbindung wird hergestellt', 'Establishing connection')}</h1>
         <p>{snapshot?.status === 'waiting'
-          ? 'Teile den Link oder den Raumcode mit der zweiten Person. Du übernimmst die Blaue Koalition.'
-          : `Dein Sitz als ${FACTIONS[session.faction].adjective} wird mit dem gemeinsamen Spielstand verbunden.`}</p>
-        <div className="room-code" aria-label={`Raumcode ${session.roomCode}`}>{session.roomCode.split('').map((letter, index) => <span key={`${letter}-${index}`}>{letter}</span>)}</div>
+          ? pick(language, 'Teile den Link oder den Raumcode mit der zweiten Person. Du übernimmst die Blaue Koalition.', 'Share the link or room code with the second player. You command the Blue Coalition.')
+          : `${pick(language, 'Dein Sitz als', 'Your seat as')} ${factionText(session.faction, language).adjective} ${pick(language, 'wird mit dem gemeinsamen Spielstand verbunden.', 'is connecting to the shared game state.')}`}</p>
+        {snapshot && <p><strong>{snapshot.state.maxRounds} {pick(language, 'Runden', 'Rounds')}</strong> · {pick(language, 'vom Host festgelegt', 'set by host')}</p>}
+        <div className="room-code" aria-label={`${pick(language, 'Raumcode', 'Room code')} ${session.roomCode}`}>{session.roomCode.split('').map((letter, index) => <span key={`${letter}-${index}`}>{letter}</span>)}</div>
         <div className="lobby-actions">
-          <button className="mode-primary" type="button" onClick={copyInvite}>{copied ? 'Link kopiert' : 'Einladungslink kopieren'}</button>
-          <button className="mode-text-button" type="button" onClick={onLeave}>Zurück zur Auswahl</button>
+          <button className="mode-primary" type="button" onClick={copyInvite}>{copied ? pick(language, 'Link kopiert', 'Link copied') : pick(language, 'Einladungslink kopieren', 'Copy invitation link')}</button>
+          <button className="mode-text-button" type="button" onClick={onLeave}>{pick(language, 'Zurück zur Auswahl', 'Back to selection')}</button>
         </div>
-        <div className={`connection-line ${connection}`}><i /> {connection === 'connected' ? 'Mit Cloudflare verbunden' : 'Verbindung wird aufgebaut …'}</div>
+        <div className={`connection-line ${connection}`}><i /> {connection === 'connected' ? pick(language, 'Mit Cloudflare verbunden', 'Connected to Cloudflare') : pick(language, 'Verbindung wird aufgebaut …', 'Establishing connection …')}</div>
       </section>
     </main>
   )
 }
 
-const HandoffOverlay = ({ faction, onReady }: { faction: FactionId; onReady: () => void }) => (
-  <div className="modal-backdrop handoff-backdrop" role="dialog" aria-modal="true" aria-labelledby="handoff-title">
+const HandoffOverlay = ({ faction, onReady }: { faction: FactionId; onReady: () => void }) => {
+  const language = useLanguage()
+  return <div className="modal-backdrop handoff-backdrop" role="dialog" aria-modal="true" aria-labelledby="handoff-title">
     <section className={`handoff-dialog ${factionClass(faction)}`}>
       <span className="result-compass">✦</span>
-      <span className="eyebrow">PASS-AND-PLAY · VERDECKTE ÜBERGABE</span>
-      <h2 id="handoff-title">{FACTIONS[faction].name} übernimmt</h2>
-      <p>Gib das Gerät an die aktive Person weiter. Handkarten und geheime Aufträge werden erst nach der Bestätigung sichtbar.</p>
-      <button className="confirm-button" type="button" onClick={onReady}>Zug übernehmen</button>
+      <span className="eyebrow">{pick(language, 'PASS-AND-PLAY · VERDECKTE ÜBERGABE', 'PASS-AND-PLAY · PRIVATE HANDOFF')}</span>
+      <h2 id="handoff-title">{factionText(faction, language).name} {pick(language, 'übernimmt', 'takes over')}</h2>
+      <p>{pick(language, 'Gib das Gerät an die aktive Person weiter. Handkarten und geheime Aufträge werden erst nach der Bestätigung sichtbar.', 'Pass the device to the active player. Cards and secret orders become visible only after confirmation.')}</p>
+      <button className="confirm-button" type="button" onClick={onReady}>{pick(language, 'Zug übernehmen', 'Take turn')}</button>
     </section>
   </div>
-)
+}
 
-export default function App() {
+function GameApp({ language, onLanguage }: { language: Language; onLanguage: (language: Language) => void }) {
   const [mode, setMode] = useState<'menu' | 'singleplayer' | 'local-pvp' | 'multiplayer'>('menu')
+  const [selectedRounds, setSelectedRounds] = useState<RoundCount>(constants.DEFAULT_ROUNDS)
   const [state, setState] = useState<GameState>(loadState)
   const [onlineSession, setOnlineSession] = useState<OnlineSession>()
   const [roomSnapshot, setRoomSnapshot] = useState<RoomSnapshot>()
@@ -906,7 +963,7 @@ export default function App() {
             setSubmitting(false)
           }
         } catch {
-          setError('Der empfangene Spielstand konnte nicht gelesen werden.')
+          setError(pick(language, 'Der empfangene Spielstand konnte nicht gelesen werden.', 'The received game state could not be read.'))
         }
       })
       socket.addEventListener('close', () => {
@@ -927,7 +984,7 @@ export default function App() {
       socketRef.current?.close()
       socketRef.current = null
     }
-  }, [mode, onlineSession])
+  }, [mode, onlineSession, language])
 
   useEffect(() => {
     if (mode !== 'singleplayer' || state.phase !== 'action' || state.activeFaction !== 'red') {
@@ -1072,8 +1129,8 @@ export default function App() {
   }
 
   const restartSingleplayer = () => {
-    if (state.phase !== 'complete' && !window.confirm('Laufende Partie wirklich verwerfen und neu beginnen?')) return
-    const fresh = createInitialState()
+    if (state.phase !== 'complete' && !window.confirm(pick(language, 'Laufende Partie wirklich verwerfen und neu beginnen?', 'Discard the current game and start again?'))) return
+    const fresh = createInitialState(state.maxRounds)
     setState(fresh)
     setInspected('central_basin')
     clearSelection()
@@ -1081,8 +1138,8 @@ export default function App() {
 
   const restartCurrentLocalGame = () => {
     if (mode !== 'local-pvp') return restartSingleplayer()
-    if (state.phase !== 'complete' && !window.confirm('Laufende Partie wirklich verwerfen und neu beginnen?')) return
-    const fresh = createInitialState()
+    if (state.phase !== 'complete' && !window.confirm(pick(language, 'Laufende Partie wirklich verwerfen und neu beginnen?', 'Discard the current game and start again?'))) return
+    const fresh = createInitialState(state.maxRounds)
     setState(fresh)
     localStorage.setItem(LOCAL_PVP_STORAGE_KEY, JSON.stringify(fresh))
     setHandoffReady(false)
@@ -1093,7 +1150,7 @@ export default function App() {
   const startSingleplayer = (fresh: boolean) => {
     setError(undefined)
     if (fresh) {
-      const initial = createInitialState()
+      const initial = createInitialState(selectedRounds)
       setState(initial)
       localStorage.setItem(STORAGE_KEY, JSON.stringify(initial))
     } else {
@@ -1106,7 +1163,7 @@ export default function App() {
 
   const startLocalPvp = (fresh: boolean) => {
     setError(undefined)
-    const initial = fresh ? createInitialState() : loadState(LOCAL_PVP_STORAGE_KEY)
+    const initial = fresh ? createInitialState(selectedRounds) : loadState(LOCAL_PVP_STORAGE_KEY)
     setState(initial)
     if (fresh) localStorage.setItem(LOCAL_PVP_STORAGE_KEY, JSON.stringify(initial))
     setInspected('central_basin')
@@ -1131,7 +1188,7 @@ export default function App() {
     setLauncherBusy(true)
     setError(undefined)
     try {
-      const response = await createOnlineRoom()
+      const response = await createOnlineRoom(selectedRounds)
       enterOnlineSession(response.session, response.snapshot)
     } catch (reason) {
       setLauncherBusy(false)
@@ -1155,7 +1212,7 @@ export default function App() {
   }
 
   const leaveToMenu = () => {
-    if (isOnline && roomSnapshot?.status === 'playing' && !window.confirm('Online-Partie verlassen? Du kannst sie später über die Modusauswahl fortsetzen.')) return
+    if (isOnline && roomSnapshot?.status === 'playing' && !window.confirm(pick(language, 'Online-Partie verlassen? Du kannst sie später über die Modusauswahl fortsetzen.', 'Leave the online game? You can resume it later from the mode selection.'))) return
     socketRef.current?.close()
     setOnlineSession(undefined)
     setRoomSnapshot(undefined)
@@ -1170,10 +1227,14 @@ export default function App() {
   if (mode === 'menu') {
     return (
       <ModeSelection
+        language={language}
+        onLanguage={onLanguage}
+        rounds={selectedRounds}
+        onRounds={setSelectedRounds}
         busy={launcherBusy}
         error={error}
-        hasSavedSingleGame={Boolean(localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(V3_STORAGE_KEY) ?? localStorage.getItem(V2_STORAGE_KEY) ?? localStorage.getItem(LEGACY_STORAGE_KEY))}
-        hasSavedLocalGame={Boolean(localStorage.getItem(LOCAL_PVP_STORAGE_KEY))}
+        hasSavedSingleGame={Boolean(localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(V4_STORAGE_KEY) ?? localStorage.getItem(V3_STORAGE_KEY) ?? localStorage.getItem(V2_STORAGE_KEY) ?? localStorage.getItem(LEGACY_STORAGE_KEY))}
+        hasSavedLocalGame={Boolean(localStorage.getItem(LOCAL_PVP_STORAGE_KEY) ?? localStorage.getItem(V4_LOCAL_PVP_STORAGE_KEY))}
         savedOnlineSession={savedOnlineSession}
         onSingleplayer={startSingleplayer}
         onLocalPvp={startLocalPvp}
@@ -1194,20 +1255,20 @@ export default function App() {
     <div className={`app-shell ${factionClass(state.activeFaction)}`}>
       <header className="topbar">
         <div className="brand-mark" aria-hidden="true"><span>✦</span></div>
-        <div className="brand-copy"><span>SEA LINES OF</span><strong>COMMUNICATION</strong><small>{isOnline ? `ONLINE · DU: ${FACTIONS[viewerFaction].adjective}` : isLocalPvp ? 'LOKALES PVP · PASS-AND-PLAY' : 'EINZELSPIELER · DU: BLAU'}</small></div>
+        <div className="brand-copy"><span>SEA LINES OF</span><strong>COMMUNICATION</strong><small>{isOnline ? `ONLINE · ${pick(language, 'DU', 'YOU')}: ${factionText(viewerFaction, language).adjective}` : isLocalPvp ? pick(language, 'LOKALES PVP · PASS-AND-PLAY', 'LOCAL PVP · PASS-AND-PLAY') : pick(language, 'EINZELSPIELER · DU: BLAU', 'SINGLE PLAYER · YOU: BLUE')}</small></div>
         <div className="turn-status">
-          <span>RUNDE</span><strong>{state.round}<small>/ {constants.MAX_ROUNDS}</small></strong>
+          <span>{pick(language, 'RUNDE', 'ROUND')}</span><strong>{state.round}<small>/ {state.maxRounds}</small></strong>
           <i />
-          <div><span>AKTIV</span><b>{FACTIONS[state.activeFaction].adjective}</b></div>
+          <div><span>{pick(language, 'AKTIV', 'ACTIVE')}</span><b>{factionText(state.activeFaction, language).adjective}</b></div>
         </div>
-        <div className={`escalation-meter ${escalationBand.tone}`} aria-label={`Eskalation ${state.escalation} von ${constants.MAX_ESCALATION}, ${escalationBand.label}`}>
-          <div className="escalation-copy"><span>ESKALATION</span><b>{escalationBand.label}</b></div>
+        <div className={`escalation-meter ${escalationBand.tone}`} aria-label={`${pick(language, 'Eskalation', 'Escalation')} ${state.escalation} ${pick(language, 'von', 'of')} ${constants.MAX_ESCALATION}, ${escalationLabel(state.escalation, language)}`}>
+          <div className="escalation-copy"><span>{pick(language, 'ESKALATION', 'ESCALATION')}</span><b>{escalationLabel(state.escalation, language)}</b></div>
           <div className="escalation-pips" aria-hidden="true">
             {Array.from({ length: constants.MAX_ESCALATION }, (_, index) => <i key={index} className={index < state.escalation ? 'filled' : ''} />)}
           </div>
           <strong>{state.escalation}<small>/{constants.MAX_ESCALATION}</small></strong>
         </div>
-        <button className="new-game" type="button" onClick={isOnline ? leaveToMenu : restartCurrentLocalGame} title={isOnline ? 'Partie verlassen' : 'Neue Partie'}>↻ <span>{isOnline ? 'Modusauswahl' : 'Neue Partie'}</span></button>
+        <button className="new-game" type="button" onClick={isOnline ? leaveToMenu : restartCurrentLocalGame} title={isOnline ? pick(language, 'Partie verlassen', 'Leave game') : pick(language, 'Neue Partie', 'New game')}>↻ <span>{isOnline ? pick(language, 'Modusauswahl', 'Mode selection') : pick(language, 'Neue Partie', 'New game')}</span></button>
       </header>
 
       <main className="game-grid">
@@ -1255,23 +1316,32 @@ export default function App() {
           onEndTurn={handleEndTurn}
           locked={!canAct}
           waitMessage={isLocalPvp
-            ? 'Die Befehlshand bleibt bis zur bestätigten Übergabe verdeckt.'
+            ? pick(language, 'Die Befehlshand bleibt bis zur bestätigten Übergabe verdeckt.', 'The command hand remains hidden until the handoff is confirmed.')
             : isOnline
             ? connection !== 'connected'
-              ? 'Verbindung zur gemeinsamen Lage wird wiederhergestellt.'
-              : `${FACTIONS[state.activeFaction].name} plant den nächsten Zug.`
+              ? pick(language, 'Verbindung zur gemeinsamen Lage wird wiederhergestellt.', 'Reconnecting to the shared situation.')
+              : `${factionText(state.activeFaction, language).name} ${pick(language, 'plant den nächsten Zug.', 'is planning the next turn.')}`
             : aiThinking
-              ? 'Die Rote KI bewertet SLOCs, Projektion und Eskalationsrisiko.'
-              : 'Die Rote KI übernimmt die Initiative.'}
+              ? pick(language, 'Die Rote KI bewertet SLOCs, Projektion und Eskalationsrisiko.', 'The Red AI is evaluating SLOCs, Projection, and Escalation risk.')
+              : pick(language, 'Die Rote KI übernimmt die Initiative.', 'The Red AI takes the initiative.')}
         />
       </main>
 
       <div className="small-screen-warning">
-        <span>✦</span><h1>Größeres Display erforderlich</h1><p>Diese operative Lagekarte ist für Desktop und Laptop ab 1280 Pixel Breite ausgelegt.</p>
+        <span>✦</span><h1>{pick(language, 'Größeres Display erforderlich', 'Larger display required')}</h1><p>{pick(language, 'Diese operative Lagekarte ist für Desktop und Laptop ab 1280 Pixel Breite ausgelegt.', 'This operational map is designed for desktop and laptop displays at least 1280 pixels wide.')}</p>
       </div>
-      <EndGameDialog state={state} onRestart={isOnline ? leaveToMenu : restartCurrentLocalGame} actionLabel={isOnline ? 'Zur Modusauswahl' : 'Neue Partie beginnen'} />
+      <EndGameDialog state={state} onRestart={isOnline ? leaveToMenu : restartCurrentLocalGame} actionLabel={isOnline ? pick(language, 'Zur Modusauswahl', 'Back to mode selection') : pick(language, 'Neue Partie beginnen', 'Start new game')} />
       {isLocalPvp && !handoffReady && state.phase === 'action' && <HandoffOverlay faction={state.activeFaction} onReady={() => setHandoffReady(true)} />}
       {showRouteRules && <RouteRulesDialog onClose={() => setShowRouteRules(false)} />}
     </div>
   )
+}
+
+export default function App() {
+  const [language, setLanguage] = useState<Language>(() => localStorage.getItem(LANGUAGE_KEY) === 'en' ? 'en' : 'de')
+  useEffect(() => {
+    localStorage.setItem(LANGUAGE_KEY, language)
+    document.documentElement.lang = language
+  }, [language])
+  return <LanguageProvider language={language}><GameApp language={language} onLanguage={setLanguage} /></LanguageProvider>
 }

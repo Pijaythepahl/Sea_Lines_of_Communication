@@ -1,6 +1,15 @@
 # Sea Lines of Communication
 
-Rundenbasiertes maritimes Strategiespiel für Desktop und Laptop. MVP 4 bietet Einzelspieler gegen die Rote KI, lokales Pass-and-play und private Online-Partien Blau gegen Rot.
+Rundenbasiertes maritimes Strategiespiel für Desktop und Laptop. MVP 5 bietet eine vollständig deutsch- und englischsprachige Oberfläche, variable Einsatzdauer sowie Einzelspieler, lokales Pass-and-play und private Online-Partien.
+
+## MVP 5
+
+- Im Hauptmenü kann jederzeit zwischen Deutsch und Englisch gewechselt werden. Die Auswahl wird lokal gespeichert und gilt im Online-PvP nur für die eigene Ansicht.
+- Neue Partien können über 6, 12 oder 18 Runden gespielt werden; 6 Runden bleiben Standard und Minimum.
+- Im Online-PvP legt die raumeröffnende Person die Rundenzahl fest. Sie wird autoritativ mit dem Spielstand synchronisiert.
+- 18-Runden-Partien verwenden drei statt zwei Exemplare jeder Karte, damit der Kartenvorrat bis zum Ende reicht.
+- „Vorausstationierung“ erhöht neben der Präsenz auch das eigene Lagebild um 1, höchstens bis Lagebild 2. Das bloße Verlegen vorhandener Präsenz erzeugt kein Lagebild.
+- Die wirtschaftlichen Schwellen der Führungswertung skalieren proportional zur Rundenzahl mit 2/3/4/5 Wirtschaftspunkten je Runde.
 
 ## Spielmodi
 
@@ -24,14 +33,14 @@ Rundenbasiertes maritimes Strategiespiel für Desktop und Laptop. MVP 4 bietet E
 - WebSockets synchronisieren Karte, Ausbau, Zugwechsel und Verbindungsstatus in Echtzeit.
 - Gegnerische Hände, Decks, Abwurfdetails und geheime Aufträge werden nicht übertragen.
 
-## Regeln von MVP 4
+## Regeln von MVP 4 und MVP 5
 
 - Ausweich-SLOCs starten bei Kapazität 3 und können für 2 AP einmal je Runde dauerhaft bis 5 ausgebaut werden.
 - Eine friedliche Seite mit mindestens 1 Rest-AP erhält bei der Wertung +1 Ruhebonus.
 - Eskalation 8 verursacht Kontrollverlust: −1 Ertrag, beziehungsweise −2 bei eigener Eskalationsverantwortung in der Runde.
 - „Hybrider Druck“ und „Beschattungsoperation“ können für +1 AP verdeckt vorbereitet werden, wenn eigenes Lagebild mindestens 1 und gegnerisches Lagebild höchstens 1 beträgt.
 - Verdeckte Aufträge wirken gleichzeitig vor der Wirtschaftsauswertung, steigern die Eskalation nicht, verhindern aber Ruhebonus und automatische Deeskalation.
-- Nach sechs Wertungen bestimmt der Wirtschaftsertrag weiterhin den Sieger; beide Seiten erhalten zusätzlich eine Führungswertung von ein bis fünf Sternen.
+- Nach der gewählten Anzahl von Wertungen bestimmt der Wirtschaftsertrag weiterhin den Sieger; beide Seiten erhalten zusätzlich eine Führungswertung von ein bis fünf Sternen.
 
 ## Lokal starten
 

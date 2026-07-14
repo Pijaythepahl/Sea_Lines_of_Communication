@@ -9,6 +9,7 @@ import type {
   LeadershipRating,
   RegionId,
   ResourceLevels,
+  RoundCount,
   RouteId,
   SuspendableResource,
   Usability,
@@ -16,7 +17,8 @@ import type {
   YieldResult,
 } from './types'
 
-const MAX_ROUNDS = 6
+const DEFAULT_ROUNDS: RoundCount = 6
+const ROUND_OPTIONS: RoundCount[] = [6, 12, 18]
 const ACTION_POINTS = 3
 const HAND_LIMIT = 7
 const MAX_ESCALATION = 8
@@ -44,8 +46,10 @@ const shuffled = <T,>(items: T[]): T[] => {
   return result
 }
 
-const createDeck = (faction: FactionId): CardInstance[] =>
-  shuffled(CARD_ORDER.flatMap((cardId) => [0, 1].map((copy) => ({ instanceId: `${faction}-${cardId}-${copy}`, cardId }))))
+const createDeck = (faction: FactionId, maxRounds: RoundCount): CardInstance[] => {
+  const copies = maxRounds === 18 ? 3 : 2
+  return shuffled(CARD_ORDER.flatMap((cardId) => Array.from({ length: copies }, (_, copy) => ({ instanceId: `${faction}-${cardId}-${copy}`, cardId }))))
+}
 
 const drawCards = (state: GameState, faction: FactionId, count = 1): void => {
   for (let index = 0; index < count; index += 1) {
@@ -55,12 +59,13 @@ const drawCards = (state: GameState, faction: FactionId, count = 1): void => {
   }
 }
 
-const addLog = (state: GameState, message: string, faction?: FactionId): void => {
-  state.log.unshift({ id: `${Date.now()}-${Math.random()}`, round: state.round, faction, message })
+const addLog = (state: GameState, message: string, faction?: FactionId, code?: string, params?: Record<string, string | number | boolean>): void => {
+  state.log.unshift({ id: `${Date.now()}-${Math.random()}`, round: state.round, faction, message, code, params })
   state.log = state.log.slice(0, 16)
 }
 
-export const createInitialState = (): GameState => {
+export const createInitialState = (maxRounds: RoundCount = DEFAULT_ROUNDS): GameState => {
+  if (!ROUND_OPTIONS.includes(maxRounds)) throw new Error('Ungültige Rundenzahl.')
   const regions = Object.fromEntries(
     REGION_ORDER.map((id) => [id, { id, resources: { blue: EMPTY_RESOURCES(), red: EMPTY_RESOURCES() } }]),
   ) as GameState['regions']
@@ -72,10 +77,11 @@ export const createInitialState = (): GameState => {
   regions.freeport_sea.resources.blue.access = 1
   regions.freeport_sea.resources.red.access = 1
 
-  const blueDeck = createDeck('blue')
-  const redDeck = createDeck('red')
+  const blueDeck = createDeck('blue', maxRounds)
+  const redDeck = createDeck('red', maxRounds)
   const state: GameState = {
-    version: 4,
+    version: 5,
+    maxRounds,
     round: 1,
     phase: 'action',
     activeFaction: 'blue',
@@ -105,7 +111,7 @@ export const createInitialState = (): GameState => {
   drawCards(state, 'blue', 5)
   drawCards(state, 'red', 5)
   drawCards(state, 'blue', 1)
-  addLog(state, 'Lage hergestellt. Die Blaue Koalition eröffnet die erste Runde.')
+  addLog(state, 'Lage hergestellt. Die Blaue Koalition eröffnet die erste Runde.', undefined, 'game-start')
   return state
 }
 
@@ -310,7 +316,7 @@ export const playCard = (state: GameState, play: CardPlay): GameState => {
     next.covertOperations.push(operation)
     next.actionPoints -= card.cost + 1
     next.hands[faction].splice(cardIndex, 1)
-    addLog(next, `${FACTIONS[faction].name} hat eine verdeckte Operation vorbereitet.`, faction)
+    addLog(next, `${FACTIONS[faction].name} hat eine verdeckte Operation vorbereitet.`, faction, 'covert-prepared', { faction })
     return next
   }
 
@@ -321,6 +327,7 @@ export const playCard = (state: GameState, play: CardPlay): GameState => {
       break
     case 'forward_deployment':
       next.regions[targets[0]].resources[faction].presence += 1
+      next.regions[targets[0]].resources[faction].awareness = Math.min(2, next.regions[targets[0]].resources[faction].awareness + 1)
       break
     case 'isr_recon':
       next.regions[targets[0]].resources[faction].awareness += 1
@@ -372,7 +379,13 @@ export const playCard = (state: GameState, play: CardPlay): GameState => {
   next.discards[faction].push(instance)
   const location = targets[0] ? ` · ${REGIONS[targets.at(-1)!].shortName}` : play.routeId ? ` · ${ROUTES[play.routeId].name}` : ''
   const escalationChange = card.escalation > 0 ? ` · Eskalation +${card.escalation}` : instance.cardId === 'deescalation_channel' ? ' · Eskalation −1' : ''
-  addLog(next, `${card.title}${location}${escalationChange}`, faction)
+  addLog(next, `${card.title}${location}${escalationChange}`, faction, 'card-played', {
+    cardId: instance.cardId,
+    regionId: targets.at(-1) ?? '',
+    routeId: play.routeId ?? '',
+    escalation: card.escalation,
+    deescalated: instance.cardId === 'deescalation_channel',
+  })
   return next
 }
 
@@ -387,7 +400,7 @@ export const upgradeDetour = (state: GameState): GameState => {
   next.routeCapacity[routeId] += 1
   next.detourUpgradedRound[faction] = next.round
   next.actionPoints -= DETOUR_UPGRADE_COST
-  addLog(next, `${FACTIONS[faction].name} baut die Ausweich-SLOC auf Kapazität ${next.routeCapacity[routeId]} aus.`, faction)
+  addLog(next, `${FACTIONS[faction].name} baut die Ausweich-SLOC auf Kapazität ${next.routeCapacity[routeId]} aus.`, faction, 'detour-upgraded', { faction, capacity: next.routeCapacity[routeId] })
   return next
 }
 
@@ -419,7 +432,7 @@ export const resolveCovertOperations = (state: GameState): GameState => {
       }
     }
     next.discards[operation.faction].push(operation.card)
-    addLog(next, `${FACTIONS[operation.faction].name}: Eine verdeckte Operation ${effective ? 'wurde wirksam' : 'blieb ohne erkennbare Wirkung'}.`, operation.faction)
+    addLog(next, `${FACTIONS[operation.faction].name}: Eine verdeckte Operation ${effective ? 'wurde wirksam' : 'blieb ohne erkennbare Wirkung'}.`, operation.faction, 'covert-resolved', { faction: operation.faction, effective })
   }
   return next
 }
@@ -435,19 +448,19 @@ export const determineWinner = (state: GameState): WinnerResult => {
   const redScore = state.economicScore.red
   if (blueScore !== redScore) {
     const faction = blueScore > redScore ? 'blue' : 'red'
-    return { faction, reason: `${FACTIONS[faction].name} erzielt den höheren wirtschaftlichen Gesamtertrag.` }
+    return { faction, reason: `${FACTIONS[faction].name} erzielt den höheren wirtschaftlichen Gesamtertrag.`, reasonCode: 'economy' }
   }
   if (state.lastYield.blue.yield !== state.lastYield.red.yield) {
     const faction = state.lastYield.blue.yield > state.lastYield.red.yield ? 'blue' : 'red'
-    return { faction, reason: `${FACTIONS[faction].name} verfügt in der Schlussrunde über die leistungsfähigere Seeverbindung.` }
+    return { faction, reason: `${FACTIONS[faction].name} verfügt in der Schlussrunde über die leistungsfähigere Seeverbindung.`, reasonCode: 'final-yield' }
   }
   const blueProjection = strategicProjection(state, 'blue')
   const redProjection = strategicProjection(state, 'red')
   if (blueProjection !== redProjection) {
     const faction = blueProjection > redProjection ? 'blue' : 'red'
-    return { faction, reason: `${FACTIONS[faction].name} besitzt die stärkere Projektion in den strategischen Kernräumen.` }
+    return { faction, reason: `${FACTIONS[faction].name} besitzt die stärkere Projektion in den strategischen Kernräumen.`, reasonCode: 'projection' }
   }
-  return { faction: null, reason: 'Beide Koalitionen halten Seeverbindungen und Projektion im Gleichgewicht.' }
+  return { faction: null, reason: 'Beide Koalitionen halten Seeverbindungen und Projektion im Gleichgewicht.', reasonCode: 'draw' }
 }
 
 const bandScore = (value: number): number => {
@@ -458,11 +471,11 @@ const bandScore = (value: number): number => {
   return 0
 }
 
-const economyScore = (value: number): number => {
-  if (value >= 30) return 2
-  if (value >= 24) return 1.5
-  if (value >= 18) return 1
-  if (value >= 12) return 0.5
+const economyScore = (value: number, maxRounds: RoundCount): number => {
+  if (value >= maxRounds * 5) return 2
+  if (value >= maxRounds * 4) return 1.5
+  if (value >= maxRounds * 3) return 1
+  if (value >= maxRounds * 2) return 0.5
   return 0
 }
 
@@ -481,7 +494,7 @@ export const calculateLeadershipRating = (state: GameState, faction: FactionId):
   const result = winner.faction === faction ? 4 : winner.faction === null ? 2 : 0
   const components = {
     result,
-    economy: economyScore(state.economicScore[faction]),
+    economy: economyScore(state.economicScore[faction], state.maxRounds),
     escalation: bandScore(state.lastEvaluationEscalation),
     responsibility: responsibilityScore(state.totalEscalation[faction]),
   }
@@ -499,7 +512,7 @@ export const endTurn = (state: GameState): GameState => {
     next.activeFaction = otherFaction(next.activeFaction)
     next.actionPoints = ACTION_POINTS
     drawCards(next, next.activeFaction)
-    addLog(next, `${FACTIONS[next.activeFaction].name} übernimmt die Initiative.`)
+    addLog(next, `${FACTIONS[next.activeFaction].name} übernimmt die Initiative.`, undefined, 'initiative', { faction: next.activeFaction })
     return next
   }
 
@@ -515,20 +528,20 @@ export const endTurn = (state: GameState): GameState => {
   next.economicScore.blue += blueYield.yield
   next.economicScore.red += redYield.yield
   const signed = (value: number) => value >= 0 ? `+${value}` : String(value)
-  addLog(next, `Wirtschaftsauswertung: Blau ${signed(blueYield.yield)} · Rot ${signed(redYield.yield)} · ${getEscalationBand(next.escalation).label}`)
+  addLog(next, `Wirtschaftsauswertung: Blau ${signed(blueYield.yield)} · Rot ${signed(redYield.yield)} · ${getEscalationBand(next.escalation).label}`, undefined, 'evaluation', { blue: blueYield.yield, red: redYield.yield, escalation: next.escalation })
   const roundRisk = next.roundEscalation.blue + next.roundEscalation.red
   if (roundRisk === 0 && !covertUsed.blue && !covertUsed.red && next.escalation > 0) {
     next.escalation -= 1
-    addLog(next, 'Eine ruhige Runde senkt die gemeinsame Eskalation um 1.')
+    addLog(next, 'Eine ruhige Runde senkt die gemeinsame Eskalation um 1.', undefined, 'quiet-round')
   }
   next.suspensions = next.suspensions.filter((entry) => entry.expiresAfterRound > next.round)
   next.protections = next.protections.filter((entry) => entry.expiresAfterRound > next.round)
 
-  if (next.round >= MAX_ROUNDS) {
+  if (next.round >= next.maxRounds) {
     next.phase = 'complete'
     next.actionPoints = 0
     next.winner = determineWinner(next)
-    addLog(next, 'Die sechste Wirtschaftsauswertung beendet die Partie.')
+    addLog(next, `Die ${next.maxRounds}. Wirtschaftsauswertung beendet die Partie.`, undefined, 'game-complete', { rounds: next.maxRounds })
     return next
   }
 
@@ -539,7 +552,7 @@ export const endTurn = (state: GameState): GameState => {
   next.roundEscalation = { blue: 0, red: 0 }
   next.endedActionPoints = { blue: 0, red: 0 }
   drawCards(next, next.activeFaction)
-  addLog(next, `Runde ${next.round} beginnt. ${FACTIONS[next.activeFaction].name} handelt zuerst.`)
+  addLog(next, `Runde ${next.round} beginnt. ${FACTIONS[next.activeFaction].name} handelt zuerst.`, undefined, 'round-start', { round: next.round, faction: next.activeFaction })
   return next
 }
 
@@ -556,7 +569,8 @@ export const createFactionView = (state: GameState, faction: FactionId): GameSta
 
 export const migrateGameState = (stored: unknown): GameState => {
   const next = structuredClone(stored) as GameState & { version: number; deescalatedThisRound?: Record<FactionId, boolean> }
-  if (next.version === 4) return next
+  if (next.version === 5) return next
+  next.maxRounds = ROUND_OPTIONS.includes(next.maxRounds) ? next.maxRounds : DEFAULT_ROUNDS
   next.escalation ??= 0
   next.roundEscalation ??= { blue: 0, red: 0 }
   next.totalEscalation ??= { ...next.roundEscalation }
@@ -582,10 +596,10 @@ export const migrateGameState = (stored: unknown): GameState => {
     }
   }
   delete next.deescalatedThisRound
-  next.version = 4
+  next.version = 5
   return next
 }
 
 export const getCardDefinition = (instance: CardInstance) => CARDS[instance.cardId]
 
-export const constants = { MAX_ROUNDS, ACTION_POINTS, HAND_LIMIT, MAX_ESCALATION, DETOUR_UPGRADE_COST, MAX_DETOUR_CAPACITY }
+export const constants = { DEFAULT_ROUNDS, ROUND_OPTIONS, ACTION_POINTS, HAND_LIMIT, MAX_ESCALATION, DETOUR_UPGRADE_COST, MAX_DETOUR_CAPACITY }

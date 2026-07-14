@@ -1,4 +1,4 @@
-import type { FactionId, GameCommand, GameState } from './types'
+import type { FactionId, GameCommand, GameState, RoundCount } from './types'
 
 export type RoomStatus = 'waiting' | 'playing' | 'complete'
 export type ConnectionStatus = 'connecting' | 'connected' | 'reconnecting' | 'offline'
@@ -34,8 +34,12 @@ const parseResponse = async (response: Response): Promise<SessionResponse> => {
   return body
 }
 
-export const createOnlineRoom = async (): Promise<SessionResponse> =>
-  parseResponse(await fetch('/api/rooms', { method: 'POST' }))
+export const createOnlineRoom = async (maxRounds: RoundCount): Promise<SessionResponse> =>
+  parseResponse(await fetch('/api/rooms', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ maxRounds }),
+  }))
 
 export const joinOnlineRoom = async (roomCode: string): Promise<SessionResponse> =>
   parseResponse(await fetch(`/api/rooms/${encodeURIComponent(roomCode.trim().toUpperCase())}/join`, { method: 'POST' }))

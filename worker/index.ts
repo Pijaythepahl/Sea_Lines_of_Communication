@@ -1,6 +1,6 @@
 import { DurableObject } from 'cloudflare:workers'
 import { createFactionView, createInitialState, endTurn, migrateGameState, playCard, upgradeDetour } from '../src/engine'
-import type { FactionId, GameCommand, GameState } from '../src/types'
+import type { FactionId, GameCommand, GameState, RoundCount } from '../src/types'
 
 interface Env {
   ASSETS: Fetcher
@@ -44,7 +44,7 @@ export class GameRoom extends DurableObject<Env> {
     super(ctx, env)
     this.ready = ctx.blockConcurrencyWhile(async () => {
       this.room = await ctx.storage.get<RoomRecord>('room') ?? null
-      if (this.room && this.room.state.version !== 4) {
+      if (this.room && this.room.state.version !== 5) {
         this.room.state = migrateGameState(this.room.state)
         await ctx.storage.put('room', this.room)
       }
@@ -104,12 +104,12 @@ export class GameRoom extends DurableObject<Env> {
 
     if (url.pathname === '/create' && request.method === 'POST') {
       if (this.room) return json({ error: 'Raumcode bereits vergeben.' }, 409)
-      const body = await request.json<{ code: string }>()
+      const body = await request.json<{ code: string; maxRounds?: RoundCount }>()
       this.room = {
         code: body.code,
         status: 'waiting',
         revision: 0,
-        state: createInitialState(),
+        state: createInitialState(body.maxRounds),
         tokens: { blue: crypto.randomUUID() },
         updatedAt: Date.now(),
       }
@@ -213,12 +213,15 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url)
     if (url.pathname === '/api/rooms' && request.method === 'POST') {
+      const body = await request.json<{ maxRounds?: RoundCount }>().catch((): { maxRounds?: RoundCount } => ({}))
+      const maxRounds = body.maxRounds ?? 6
+      if (![6, 12, 18].includes(maxRounds)) return json({ error: 'Ungültige Rundenzahl.' }, 400)
       for (let attempt = 0; attempt < 5; attempt += 1) {
         const code = roomCode()
         const response = await roomStub(env, code).fetch(new Request(new URL('/create', request.url), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ code }),
+          body: JSON.stringify({ code, maxRounds }),
         }))
         if (response.status !== 409) return response
       }

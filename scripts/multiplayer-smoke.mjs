@@ -58,8 +58,13 @@ const opened = (socket) => socket.readyState === WebSocket.OPEN
     socket.addEventListener('error', reject, { once: true })
   })
 
-const created = await request('/api/rooms', { method: 'POST' })
+const created = await request('/api/rooms', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ maxRounds: 12 }),
+})
 if (created.snapshot.status !== 'waiting' || created.session.faction !== 'blue') throw new Error('Room creation contract failed')
+if (created.snapshot.state.maxRounds !== 12 || created.snapshot.state.version !== 5) throw new Error('Room configuration contract failed')
 
 const joined = await request(`/api/rooms/${created.session.roomCode}/join`, { method: 'POST' })
 if (joined.snapshot.status !== 'playing' || joined.session.faction !== 'red') throw new Error('Room join contract failed')
