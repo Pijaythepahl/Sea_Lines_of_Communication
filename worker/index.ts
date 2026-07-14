@@ -1,6 +1,6 @@
 import { DurableObject } from 'cloudflare:workers'
-import { createInitialState, endTurn, otherFaction, playCard } from '../src/engine'
-import type { CardPlay, FactionId, GameState } from '../src/types'
+import { createFactionView, createInitialState, endTurn, migrateGameState, playCard, upgradeDetour } from '../src/engine'
+import type { FactionId, GameCommand, GameState } from '../src/types'
 
 interface Env {
   ASSETS: Fetcher
@@ -21,9 +21,7 @@ interface SocketAttachment {
   token: string
 }
 
-type RoomCommand =
-  | { type: 'play-card'; play: CardPlay; revision: number }
-  | { type: 'end-turn'; revision: number }
+type RoomCommand = GameCommand & { revision: number }
 
 const json = (value: unknown, status = 200) => Response.json(value, {
   status,
@@ -46,6 +44,10 @@ export class GameRoom extends DurableObject<Env> {
     super(ctx, env)
     this.ready = ctx.blockConcurrencyWhile(async () => {
       this.room = await ctx.storage.get<RoomRecord>('room') ?? null
+      if (this.room && this.room.state.version !== 4) {
+        this.room.state = migrateGameState(this.room.state)
+        await ctx.storage.put('room', this.room)
+      }
     })
   }
 
@@ -60,11 +62,7 @@ export class GameRoom extends DurableObject<Env> {
 
   private snapshot(faction: FactionId) {
     if (!this.room) throw new Error('Spielraum nicht initialisiert.')
-    const state = structuredClone(this.room.state)
-    const opponent = otherFaction(faction)
-    state.hands[opponent] = []
-    state.decks.blue = []
-    state.decks.red = []
+    const state = createFactionView(this.room.state, faction)
     return {
       type: 'snapshot' as const,
       roomCode: this.room.code,
@@ -172,6 +170,8 @@ export class GameRoom extends DurableObject<Env> {
 
       if (command.type === 'play-card') {
         this.room.state = playCard(this.room.state, command.play)
+      } else if (command.type === 'upgrade-detour') {
+        this.room.state = upgradeDetour(this.room.state)
       } else if (command.type === 'end-turn') {
         this.room.state = endTurn(this.room.state)
       } else {

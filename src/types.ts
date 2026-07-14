@@ -90,7 +90,13 @@ export interface CardPlay {
   regions?: RegionId[]
   routeId?: RouteId
   resource?: SuspendableResource
+  covert?: boolean
 }
+
+export type GameCommand =
+  | { type: 'play-card'; play: CardPlay }
+  | { type: 'upgrade-detour' }
+  | { type: 'end-turn' }
 
 export interface TemporarySuspension {
   id: string
@@ -116,7 +122,18 @@ export interface YieldResult {
   contestedRegions: number
   escalationPenalty: number
   responsibilityPenalty: number
+  restraintBonus: number
+  controlLossPenalty: number
   reason?: string
+}
+
+export interface CovertOperation {
+  id: string
+  faction: FactionId
+  card: CardInstance
+  regions: RegionId[]
+  resource?: SuspendableResource
+  committedRound: number
 }
 
 export interface LogEntry {
@@ -131,8 +148,21 @@ export interface WinnerResult {
   reason: string
 }
 
+export interface LeadershipRating {
+  faction: FactionId
+  score: number
+  stars: 1 | 2 | 3 | 4 | 5
+  label: string
+  components: {
+    result: number
+    economy: number
+    escalation: number
+    responsibility: number
+  }
+}
+
 export interface GameState {
-  version: 3
+  version: 4
   round: number
   phase: GamePhase
   activeFaction: FactionId
@@ -143,11 +173,17 @@ export interface GameState {
   hands: Record<FactionId, CardInstance[]>
   discards: Record<FactionId, CardInstance[]>
   economicScore: Record<FactionId, number>
+  routeCapacity: Record<RouteId, number>
+  detourUpgradedRound: Record<FactionId, number | null>
   escalation: number
   roundEscalation: Record<FactionId, number>
+  totalEscalation: Record<FactionId, number>
+  endedActionPoints: Record<FactionId, number>
+  lastEvaluationEscalation: number
   lastYield: Record<FactionId, YieldResult>
   suspensions: TemporarySuspension[]
   protections: RouteProtection[]
+  covertOperations: CovertOperation[]
   log: LogEntry[]
   winner?: WinnerResult
 }

@@ -1,23 +1,28 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { chooseAiPlay } from './ai'
+import { chooseAiAction } from './ai'
 import { CARDS, FACTIONS, REGIONS, REGION_ORDER, RESOURCE_LABELS, ROUTES, ROUTE_ORDER, USABILITY_LABELS } from './data'
 import {
   calculateProjection,
+  calculateLeadershipRating,
+  calculateRoundYield,
   calculateRouteYield,
   constants,
+  COVERT_CARD_IDS,
+  createFactionView,
   createInitialState,
   endTurn,
   evaluateChokepoint,
-  getBestYield,
   getEffectiveResources,
   getEscalationBand,
   getUsability,
   getValidHybridResources,
   getValidRegionTargets,
   isPlayReady,
+  migrateGameState,
   otherFaction,
   playCard,
+  upgradeDetour,
 } from './engine'
 import {
   createOnlineRoom,
@@ -40,52 +45,21 @@ import type {
   SuspendableResource,
 } from './types'
 
-const STORAGE_KEY = 'sloc-game-v3'
+const STORAGE_KEY = 'sloc-game-v4'
+const LOCAL_PVP_STORAGE_KEY = 'sloc-local-pvp-v4'
+const V3_STORAGE_KEY = 'sloc-game-v3'
 const V2_STORAGE_KEY = 'sloc-game-v2'
 const LEGACY_STORAGE_KEY = 'sloc-mvp1-game-v1'
 const ONLINE_SESSION_KEY = 'sloc-online-session-v1'
 
-type StoredGameState = Omit<GameState, 'version'> & {
-  version: number
-  deescalatedThisRound?: Record<FactionId, boolean>
-}
-
-const migrateToV3 = (stored: StoredGameState): GameState => {
-  const next = structuredClone(stored)
-  for (const faction of ['blue', 'red'] as const) {
-    const zones = [...next.decks[faction], ...next.hands[faction], ...next.discards[faction]]
-    if (!zones.some((card) => card.cardId === 'deescalation_channel')) {
-      next.decks[faction].unshift(
-        { instanceId: `${faction}-deescalation_channel-migrated-0`, cardId: 'deescalation_channel' },
-        { instanceId: `${faction}-deescalation_channel-migrated-1`, cardId: 'deescalation_channel' },
-      )
-    }
-  }
-  delete next.deescalatedThisRound
-  return { ...next, version: 3 }
-}
-
-const loadState = (): GameState => {
+const loadState = (storageKey = STORAGE_KEY): GameState => {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(V2_STORAGE_KEY) ?? localStorage.getItem(LEGACY_STORAGE_KEY)
+    const raw = localStorage.getItem(storageKey)
+      ?? (storageKey === STORAGE_KEY ? localStorage.getItem(V3_STORAGE_KEY) ?? localStorage.getItem(V2_STORAGE_KEY) ?? localStorage.getItem(LEGACY_STORAGE_KEY) : null)
     if (!raw) return createInitialState()
-    const parsed = JSON.parse(raw) as StoredGameState
+    const parsed = JSON.parse(raw) as GameState
     if (!parsed.regions?.central_basin || !parsed.hands?.blue) return createInitialState()
-    if (parsed.version === 3) return parsed as GameState
-    if (parsed.version === 2) return migrateToV3(parsed)
-    if (parsed.version === 1) {
-      return migrateToV3({
-        ...parsed,
-        version: 2,
-        escalation: 0,
-        roundEscalation: { blue: 0, red: 0 },
-        lastYield: {
-          blue: { ...parsed.lastYield.blue, escalationPenalty: 0, responsibilityPenalty: 0 },
-          red: { ...parsed.lastYield.red, escalationPenalty: 0, responsibilityPenalty: 0 },
-        },
-      })
-    }
-    return createInitialState()
+    return migrateGameState(parsed)
   } catch {
     return createInitialState()
   }
@@ -393,26 +367,30 @@ interface ScoreboardProps {
   validRoutes: RouteId[]
   selectedRoute?: RouteId
   onRouteClick: (routeId: RouteId) => void
+  onUpgradeDetour: () => void
+  canUpgradeDetour: boolean
   onShowRules: () => void
 }
 
-const Scoreboard = ({ state, validRoutes, selectedRoute, onRouteClick, onShowRules }: ScoreboardProps) => (
+const Scoreboard = ({ state, validRoutes, selectedRoute, onRouteClick, onUpgradeDetour, canUpgradeDetour, onShowRules }: ScoreboardProps) => (
   <aside className="right-sidebar">
     <section className="panel score-panel">
       <div className="panel-heading"><span>Wirtschaftlicher Ertrag</span><small>nach {state.round > 1 ? `${state.round - 1} Wertungen` : 'Startlage'}</small></div>
       <div className="score-comparison">
         {(['blue', 'red'] as const).map((faction) => {
-          const forecast = getBestYield(state, faction)
+          const forecastAp = faction === state.activeFaction ? state.actionPoints : state.endedActionPoints[faction]
+          const forecast = calculateRoundYield(state, faction, { actionPoints: forecastAp })
+          const signed = forecast.yield >= 0 ? `+${forecast.yield}` : String(forecast.yield)
           return (
             <div className={`score-side ${factionClass(faction)}`} key={faction}>
               <span>{FACTIONS[faction].adjective}</span>
               <strong>{state.economicScore[faction]}</strong>
-              <small>Prognose +{forecast.yield}</small>
+              <small>Prognose {signed}{forecast.restraintBonus ? ' · Ruhe +1' : ''}</small>
             </div>
           )
         })}
       </div>
-      <div className="score-scale"><i style={{ width: `${Math.min(100, (state.economicScore.blue / 36) * 100)}%` }} /><i style={{ width: `${Math.min(100, (state.economicScore.red / 36) * 100)}%` }} /></div>
+      <div className="score-scale"><i style={{ width: `${Math.max(0, Math.min(100, (state.economicScore.blue / 42) * 100))}%` }} /><i style={{ width: `${Math.max(0, Math.min(100, (state.economicScore.red / 42) * 100))}%` }} /></div>
       <p className="score-caption">Nur die ertragreichste nutzbare SLOC zählt am Rundenende.</p>
     </section>
 
@@ -436,7 +414,7 @@ const Scoreboard = ({ state, validRoutes, selectedRoute, onRouteClick, onShowRul
             >
               <span className="route-line-icon">{route.kind === 'main' ? '━' : '┄'}</span>
               <span>
-                <strong>{route.name.replace(/^(Blaue|Rote) /, '')}</strong>
+                <strong>{route.name.replace(/^(Blaue|Rote) /, '')} · Kapazität {state.routeCapacity[routeId]}</strong>
                 <small>{result.blocked ? result.reason : `${result.contestedRegions} unter Druck · Esk −${result.escalationPenalty + result.responsibilityPenalty}`}</small>
               </span>
               <b className={result.blocked ? 'blocked' : ''}>{result.blocked ? 'ZU' : `+${result.yield}`}</b>
@@ -444,6 +422,10 @@ const Scoreboard = ({ state, validRoutes, selectedRoute, onRouteClick, onShowRul
           )
         })}
       </div>
+      <button className="detour-upgrade-button" type="button" onClick={onUpgradeDetour} disabled={!canUpgradeDetour}>
+        Ausweich-SLOC ausbauen · 2 AP
+        <small>dauerhaft +1 · maximal 5 · einmal je Runde</small>
+      </button>
     </section>
 
     <section className="panel round-track">
@@ -518,6 +500,8 @@ const RouteRulesDialog = ({ onClose }: { onClose: () => void }) => {
           <p><strong>Engpasskontrolle:</strong> mindestens 2 Punkte Projektionsvorsprung sowie 2 Präsenz und 1 Zugang in der Meridianstraße. Die Ausweich-SLOC bleibt möglich.</p>
           <p><strong>Eskalation:</strong> verändert nicht den Status „frei/zu“, reduziert aber zusätzlich den wirtschaftlichen Ertrag einer weiterhin nutzbaren SLOC.</p>
           <p><strong>Konvoisicherung:</strong> hebt bei der nächsten Wertung genau einen „unter Druck“-Malus auf.</p>
+          <p><strong>Ausbau:</strong> Für 2 AP steigt die eigene Ausweich-SLOC einmal je Runde dauerhaft um 1, bis maximal Kapazität 5.</p>
+          <p><strong>Kontrollverlust:</strong> Eskalation 8 erzeugt unabhängig vom Seeweg −1 Ertrag, bei eigener Eskalationsverantwortung −2.</p>
         </div>
 
         <footer><button className="confirm-button" type="button" onClick={onClose}>Verstanden</button></footer>
@@ -532,9 +516,11 @@ interface HandProps {
   selectedRegions: RegionId[]
   selectedRoute?: RouteId
   hybridResource?: SuspendableResource
+  covert: boolean
   error?: string
   onSelect: (instance: CardInstance) => void
   onResource: (resource: SuspendableResource) => void
+  onCovert: (covert: boolean) => void
   onConfirm: () => void
   onCancel: () => void
   onEndTurn: () => void
@@ -542,7 +528,7 @@ interface HandProps {
   waitMessage?: string
 }
 
-const CardHand = ({ state, selected, selectedRegions, selectedRoute, hybridResource, error, onSelect, onResource, onConfirm, onCancel, onEndTurn, locked = false, waitMessage }: HandProps) => {
+const CardHand = ({ state, selected, selectedRegions, selectedRoute, hybridResource, covert, error, onSelect, onResource, onCovert, onConfirm, onCancel, onEndTurn, locked = false, waitMessage }: HandProps) => {
   const faction = state.activeFaction
   const hoverTimer = useRef<ReturnType<typeof window.setTimeout> | null>(null)
   const [tooltip, setTooltip] = useState<{
@@ -552,8 +538,9 @@ const CardHand = ({ state, selected, selectedRegions, selectedRoute, hybridResou
     insufficientAp: boolean
   }>()
   const card = selected ? CARDS[selected.cardId] : undefined
-  const play: CardPlay | undefined = selected ? { instanceId: selected.instanceId, regions: selectedRegions, routeId: selectedRoute, resource: hybridResource } : undefined
-  const ready = card && play ? isPlayReady(card.id, play) : false
+  const play: CardPlay | undefined = selected ? { instanceId: selected.instanceId, regions: selectedRegions, routeId: selectedRoute, resource: hybridResource, covert } : undefined
+  const totalCost = card ? card.cost + (covert ? 1 : 0) : 0
+  const ready = card && play ? isPlayReady(card.id, play) && totalCost <= state.actionPoints : false
   const hybridOptions = card?.target === 'hybrid-resource' && selectedRegions[0]
     ? getValidHybridResources(state, selectedRegions[0])
     : []
@@ -606,10 +593,16 @@ const CardHand = ({ state, selected, selectedRegions, selectedRoute, hybridResou
         <div className="composer-copy">
           <span className="eyebrow">{card ? `BEFEHL · ${card.domain}` : 'BEFEHLSHAND'}</span>
           <strong>{card ? card.instruction : 'Karte wählen und Wirkung auf der Lagekarte platzieren.'}</strong>
+          {!card && state.covertOperations.some((entry) => entry.faction === faction) && <small>Eine eigene verdeckte Operation ist für die nächste Wertung vorbereitet.</small>}
           {error && <small className="action-error">{error}</small>}
         </div>
         {card && (
           <div className="target-summary">
+            {COVERT_CARD_IDS.includes(card.id) && (
+              <button className={covert ? 'covert-active' : ''} type="button" onClick={() => onCovert(!covert)} disabled={!covert && card.cost + 1 > state.actionPoints}>
+                {covert ? 'Verdeckt · Wirkung zur Wertung' : 'Offen spielen'}
+              </button>
+            )}
             {selectedRegions.map((id, index) => <span key={`${id}-${index}`}>{index + 1}. {REGIONS[id].shortName}</span>)}
             {selectedRoute && <span>{ROUTES[selectedRoute].name}</span>}
             {hybridOptions.length > 0 && !hybridResource && hybridOptions.map((resource) => (
@@ -620,7 +613,7 @@ const CardHand = ({ state, selected, selectedRegions, selectedRoute, hybridResou
         )}
         <div className="composer-actions">
           {card && <button className="ghost-button" type="button" onClick={onCancel}>Abbrechen</button>}
-          {card && <button className="confirm-button" type="button" disabled={!ready} onClick={onConfirm}>Für {card.cost} AP ausspielen</button>}
+          {card && <button className="confirm-button" type="button" disabled={!ready} onClick={onConfirm}>Für {totalCost} AP {covert ? 'vorbereiten' : 'ausspielen'}</button>}
           <button className="end-turn-button" type="button" onClick={onEndTurn}>Zug beenden <span>→</span></button>
         </div>
       </div>
@@ -674,6 +667,7 @@ const CardHand = ({ state, selected, selectedRegions, selectedRoute, hybridResou
                 <p>{definition.escalationReason}</p>
               </div>
             )}
+            {COVERT_CARD_IDS.includes(definition.id) && <div className="hover-help-section"><b>Verdeckte Variante</b><p>Für +1 AP verzögert und ohne Eskalationsanstieg, wenn eigenes Lagebild mindestens 1 und gegnerisches höchstens 1 beträgt.</p></div>}
             {tooltip.insufficientAp && <div className="hover-help-warning">Aktuell fehlen Aktionspunkte: benötigt {definition.cost}, verfügbar {state.actionPoints}.</div>}
           </aside>
         )
@@ -685,6 +679,7 @@ const CardHand = ({ state, selected, selectedRegions, selectedRoute, hybridResou
 const EndGameDialog = ({ state, onRestart, actionLabel = 'Neue Partie beginnen' }: { state: GameState; onRestart: () => void; actionLabel?: string }) => {
   if (state.phase !== 'complete' || !state.winner) return null
   const winner = state.winner.faction
+  const ratings = (['blue', 'red'] as const).map((faction) => calculateLeadershipRating(state, faction))
   return (
     <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="result-title">
       <div className={`result-dialog ${winner ? factionClass(winner) : ''}`}>
@@ -697,6 +692,16 @@ const EndGameDialog = ({ state, onRestart, actionLabel = 'Neue Partie beginnen' 
           <i>:</i>
           <div className="is-red"><span>Rot</span><strong>{state.economicScore.red}</strong></div>
         </div>
+        <div className="leadership-ratings">
+          {ratings.map((rating) => (
+            <article className={factionClass(rating.faction)} key={rating.faction}>
+              <span>{FACTIONS[rating.faction].name}</span>
+              <strong aria-label={`${rating.stars} von 5 Sternen`}>{'★'.repeat(rating.stars)}{'☆'.repeat(5 - rating.stars)}</strong>
+              <b>{rating.label}</b>
+              <small>Ergebnis {rating.components.result}/4 · Wirtschaft {rating.components.economy}/2 · Eskalation {rating.components.escalation}/2 · Verantwortung {rating.components.responsibility}/2</small>
+            </article>
+          ))}
+        </div>
         <button className="confirm-button" type="button" onClick={onRestart}>{actionLabel}</button>
       </div>
     </div>
@@ -707,14 +712,16 @@ interface ModeSelectionProps {
   busy: boolean
   error?: string
   hasSavedSingleGame: boolean
+  hasSavedLocalGame: boolean
   savedOnlineSession?: OnlineSession
   onSingleplayer: (fresh: boolean) => void
+  onLocalPvp: (fresh: boolean) => void
   onCreateRoom: () => void
   onJoinRoom: (code: string) => void
   onResumeRoom: (session: OnlineSession) => void
 }
 
-const ModeSelection = ({ busy, error, hasSavedSingleGame, savedOnlineSession, onSingleplayer, onCreateRoom, onJoinRoom, onResumeRoom }: ModeSelectionProps) => {
+const ModeSelection = ({ busy, error, hasSavedSingleGame, hasSavedLocalGame, savedOnlineSession, onSingleplayer, onLocalPvp, onCreateRoom, onJoinRoom, onResumeRoom }: ModeSelectionProps) => {
   const queryRoom = new URLSearchParams(window.location.search).get('room') ?? ''
   const [joinCode, setJoinCode] = useState(queryRoom.toUpperCase())
 
@@ -723,12 +730,12 @@ const ModeSelection = ({ busy, error, hasSavedSingleGame, savedOnlineSession, on
       <div className="mode-backdrop" aria-hidden="true"><i /><i /><i /></div>
       <header className="mode-brand">
         <span className="mode-brand-mark">✦</span>
-        <div><span>SEA LINES OF</span><strong>COMMUNICATION</strong><small>MVP 3 · Maritime Strategie gegen KI oder eine zweite Person</small></div>
+        <div><span>SEA LINES OF</span><strong>COMMUNICATION</strong><small>MVP 4 · Resilienz, Grauzone und drei Spielmodi</small></div>
       </header>
       <section className="mode-intro">
         <span className="eyebrow">EINSATZBEREITSCHAFT HERSTELLEN</span>
         <h1>Wie möchtest du spielen?</h1>
-        <p>Die Regeln bleiben identisch. Im Einzelspieler führst du Blau gegen die Rote KI. Online erhält jede Person eine eigene, verdeckte Befehlshand.</p>
+        <p>Spiele gegen die KI, gemeinsam an einem Gerät oder online. Kartenhände und verdeckte Operationen bleiben in beiden PvP-Modi geschützt.</p>
       </section>
       <section className="mode-options" aria-label="Spielmodus wählen">
         <article className="mode-card single-mode">
@@ -744,8 +751,21 @@ const ModeSelection = ({ busy, error, hasSavedSingleGame, savedOnlineSession, on
           {hasSavedSingleGame && <button className="mode-text-button" type="button" disabled={busy} onClick={() => onSingleplayer(true)}>Neue Einzelpartie</button>}
         </article>
 
-        <article className="mode-card online-mode">
+        <article className="mode-card local-mode">
           <span className="mode-number">02</span>
+          <div className="mode-icon" aria-hidden="true">⇄</div>
+          <span className="eyebrow">LOKALES PVP</span>
+          <h2>Pass-and-play</h2>
+          <p>Blau und Rot teilen sich ein Gerät. Ein Übergabebildschirm schützt Hände und vorbereitete Operationen vor der jeweils anderen Seite.</p>
+          <ul><li>kein Netzwerk nötig</li><li>separat gespeichert</li><li>verdeckte Hände</li></ul>
+          <button className="mode-primary" type="button" disabled={busy} onClick={() => onLocalPvp(!hasSavedLocalGame)}>
+            {hasSavedLocalGame ? 'Lokale Partie fortsetzen' : 'Lokale Partie starten'} <span>→</span>
+          </button>
+          {hasSavedLocalGame && <button className="mode-text-button" type="button" disabled={busy} onClick={() => onLocalPvp(true)}>Neue lokale Partie</button>}
+        </article>
+
+        <article className="mode-card online-mode">
+          <span className="mode-number">03</span>
           <div className="mode-icon" aria-hidden="true">◎</div>
           <span className="eyebrow">ONLINE-MULTIPLAYER</span>
           <h2>Blau gegen Rot</h2>
@@ -805,8 +825,20 @@ const OnlineLobby = ({ session, snapshot, connection, onLeave }: { session: Onli
   )
 }
 
+const HandoffOverlay = ({ faction, onReady }: { faction: FactionId; onReady: () => void }) => (
+  <div className="modal-backdrop handoff-backdrop" role="dialog" aria-modal="true" aria-labelledby="handoff-title">
+    <section className={`handoff-dialog ${factionClass(faction)}`}>
+      <span className="result-compass">✦</span>
+      <span className="eyebrow">PASS-AND-PLAY · VERDECKTE ÜBERGABE</span>
+      <h2 id="handoff-title">{FACTIONS[faction].name} übernimmt</h2>
+      <p>Gib das Gerät an die aktive Person weiter. Handkarten und geheime Aufträge werden erst nach der Bestätigung sichtbar.</p>
+      <button className="confirm-button" type="button" onClick={onReady}>Zug übernehmen</button>
+    </section>
+  </div>
+)
+
 export default function App() {
-  const [mode, setMode] = useState<'menu' | 'singleplayer' | 'multiplayer'>('menu')
+  const [mode, setMode] = useState<'menu' | 'singleplayer' | 'local-pvp' | 'multiplayer'>('menu')
   const [state, setState] = useState<GameState>(loadState)
   const [onlineSession, setOnlineSession] = useState<OnlineSession>()
   const [roomSnapshot, setRoomSnapshot] = useState<RoomSnapshot>()
@@ -818,6 +850,8 @@ export default function App() {
   const [selectedRegions, setSelectedRegions] = useState<RegionId[]>([])
   const [selectedRoute, setSelectedRoute] = useState<RouteId>()
   const [hybridResource, setHybridResource] = useState<SuspendableResource>()
+  const [covert, setCovert] = useState(false)
+  const [handoffReady, setHandoffReady] = useState(false)
   const [inspected, setInspected] = useState<RegionId>('central_basin')
   const [error, setError] = useState<string>()
   const [showRouteRules, setShowRouteRules] = useState(false)
@@ -837,6 +871,7 @@ export default function App() {
 
   useEffect(() => {
     if (mode === 'singleplayer') localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+    if (mode === 'local-pvp') localStorage.setItem(LOCAL_PVP_STORAGE_KEY, JSON.stringify(state))
   }, [state, mode])
 
   useEffect(() => {
@@ -901,28 +936,41 @@ export default function App() {
     }
     setAiThinking(true)
     const timer = window.setTimeout(() => {
-      const decision = chooseAiPlay(state)
+      const decision = chooseAiAction(state)
       setState((current) => {
         if (current.activeFaction !== 'red' || current.phase !== 'action') return current
-        return decision ? playCard(current, decision) : endTurn(current)
+        if (!decision || decision.type === 'end-turn') return endTurn(current)
+        if (decision.type === 'upgrade-detour') return upgradeDetour(current)
+        return playCard(current, decision.play)
       })
     }, 720)
     return () => window.clearTimeout(timer)
   }, [mode, state])
 
   const isOnline = mode === 'multiplayer'
-  const viewerFaction: FactionId = isOnline && onlineSession ? onlineSession.faction : 'blue'
+  const isLocalPvp = mode === 'local-pvp'
+  const viewerFaction: FactionId = isOnline && onlineSession ? onlineSession.faction : isLocalPvp ? state.activeFaction : 'blue'
+  const visibleState = useMemo(
+    () => isOnline ? state : createFactionView(state, viewerFaction),
+    [state, viewerFaction, isOnline],
+  )
   const canAct = state.phase === 'action'
     && state.activeFaction === viewerFaction
+    && (!isLocalPvp || handoffReady)
     && (!isOnline || (roomSnapshot?.status === 'playing' && connection === 'connected' && !submitting))
 
   const selectedCard = canAct ? state.hands[state.activeFaction].find((entry) => entry.instanceId === selectedCardId) : undefined
   const selectedDefinition = selectedCard ? CARDS[selectedCard.cardId] : undefined
   const validRegions = useMemo(
-    () => selectedCard && selectedDefinition?.target !== 'route' && !isPlayReady(selectedCard.cardId, { instanceId: selectedCard.instanceId, regions: selectedRegions, resource: hybridResource })
-      ? getValidRegionTargets(state, selectedCard.cardId, selectedRegions)
-      : [],
-    [state, selectedCard, selectedDefinition, selectedRegions, hybridResource],
+    () => {
+      if (!selectedCard || selectedDefinition?.target === 'route' || isPlayReady(selectedCard.cardId, { instanceId: selectedCard.instanceId, regions: selectedRegions, resource: hybridResource })) return []
+      const targets = getValidRegionTargets(state, selectedCard.cardId, selectedRegions)
+      if (!covert || selectedRegions.length > 0) return targets
+      const faction = state.activeFaction
+      const opponent = otherFaction(faction)
+      return targets.filter((regionId) => getEffectiveResources(state, regionId, faction).awareness >= 1 && getEffectiveResources(state, regionId, opponent).awareness <= 1)
+    },
+    [state, selectedCard, selectedDefinition, selectedRegions, hybridResource, covert],
   )
   const validRoutes = selectedDefinition?.target === 'route'
     ? ROUTE_ORDER.filter((id) => ROUTES[id].faction === state.activeFaction)
@@ -933,6 +981,7 @@ export default function App() {
     setSelectedRegions([])
     setSelectedRoute(undefined)
     setHybridResource(undefined)
+    setCovert(false)
     setError(undefined)
   }
 
@@ -946,6 +995,7 @@ export default function App() {
     setSelectedRegions([])
     setSelectedRoute(undefined)
     setHybridResource(undefined)
+    setCovert(false)
     setError(undefined)
   }
 
@@ -968,6 +1018,7 @@ export default function App() {
       regions: selectedRegions,
       routeId: selectedRoute,
       resource: hybridResource,
+      covert,
     }
     try {
       if (isOnline) {
@@ -985,6 +1036,23 @@ export default function App() {
     }
   }
 
+  const handleUpgradeDetour = () => {
+    if (!canAct) return
+    try {
+      if (isOnline) {
+        if (!roomSnapshot || socketRef.current?.readyState !== WebSocket.OPEN) throw new Error('Die Online-Verbindung ist noch nicht bereit.')
+        socketRef.current.send(JSON.stringify({ type: 'upgrade-detour', revision: roomSnapshot.revision } satisfies RoomCommand))
+        pendingRevisionRef.current = roomSnapshot.revision
+        setSubmitting(true)
+      } else {
+        setState((current) => upgradeDetour(current))
+      }
+      clearSelection()
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Die Ausweich-SLOC konnte nicht ausgebaut werden.')
+    }
+  }
+
   const handleEndTurn = () => {
     if (!canAct) return
     try {
@@ -995,6 +1063,7 @@ export default function App() {
         setSubmitting(true)
       } else {
         setState((current) => endTurn(current))
+        if (isLocalPvp) setHandoffReady(false)
       }
       clearSelection()
     } catch (reason) {
@@ -1010,6 +1079,17 @@ export default function App() {
     clearSelection()
   }
 
+  const restartCurrentLocalGame = () => {
+    if (mode !== 'local-pvp') return restartSingleplayer()
+    if (state.phase !== 'complete' && !window.confirm('Laufende Partie wirklich verwerfen und neu beginnen?')) return
+    const fresh = createInitialState()
+    setState(fresh)
+    localStorage.setItem(LOCAL_PVP_STORAGE_KEY, JSON.stringify(fresh))
+    setHandoffReady(false)
+    setInspected('central_basin')
+    clearSelection()
+  }
+
   const startSingleplayer = (fresh: boolean) => {
     setError(undefined)
     if (fresh) {
@@ -1021,6 +1101,17 @@ export default function App() {
     }
     setInspected('central_basin')
     setMode('singleplayer')
+    clearSelection()
+  }
+
+  const startLocalPvp = (fresh: boolean) => {
+    setError(undefined)
+    const initial = fresh ? createInitialState() : loadState(LOCAL_PVP_STORAGE_KEY)
+    setState(initial)
+    if (fresh) localStorage.setItem(LOCAL_PVP_STORAGE_KEY, JSON.stringify(initial))
+    setInspected('central_basin')
+    setHandoffReady(false)
+    setMode('local-pvp')
     clearSelection()
   }
 
@@ -1081,9 +1172,11 @@ export default function App() {
       <ModeSelection
         busy={launcherBusy}
         error={error}
-        hasSavedSingleGame={Boolean(localStorage.getItem(STORAGE_KEY))}
+        hasSavedSingleGame={Boolean(localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(V3_STORAGE_KEY) ?? localStorage.getItem(V2_STORAGE_KEY) ?? localStorage.getItem(LEGACY_STORAGE_KEY))}
+        hasSavedLocalGame={Boolean(localStorage.getItem(LOCAL_PVP_STORAGE_KEY))}
         savedOnlineSession={savedOnlineSession}
         onSingleplayer={startSingleplayer}
+        onLocalPvp={startLocalPvp}
         onCreateRoom={createRoom}
         onJoinRoom={joinRoom}
         onResumeRoom={(session) => enterOnlineSession(session)}
@@ -1101,7 +1194,7 @@ export default function App() {
     <div className={`app-shell ${factionClass(state.activeFaction)}`}>
       <header className="topbar">
         <div className="brand-mark" aria-hidden="true"><span>✦</span></div>
-        <div className="brand-copy"><span>SEA LINES OF</span><strong>COMMUNICATION</strong><small>{isOnline ? `ONLINE · DU: ${FACTIONS[viewerFaction].adjective}` : 'EINZELSPIELER · DU: BLAU'}</small></div>
+        <div className="brand-copy"><span>SEA LINES OF</span><strong>COMMUNICATION</strong><small>{isOnline ? `ONLINE · DU: ${FACTIONS[viewerFaction].adjective}` : isLocalPvp ? 'LOKALES PVP · PASS-AND-PLAY' : 'EINZELSPIELER · DU: BLAU'}</small></div>
         <div className="turn-status">
           <span>RUNDE</span><strong>{state.round}<small>/ {constants.MAX_ROUNDS}</small></strong>
           <i />
@@ -1114,13 +1207,13 @@ export default function App() {
           </div>
           <strong>{state.escalation}<small>/{constants.MAX_ESCALATION}</small></strong>
         </div>
-        <button className="new-game" type="button" onClick={isOnline ? leaveToMenu : restartSingleplayer} title={isOnline ? 'Partie verlassen' : 'Neue Partie'}>↻ <span>{isOnline ? 'Modusauswahl' : 'Neue Partie'}</span></button>
+        <button className="new-game" type="button" onClick={isOnline ? leaveToMenu : restartCurrentLocalGame} title={isOnline ? 'Partie verlassen' : 'Neue Partie'}>↻ <span>{isOnline ? 'Modusauswahl' : 'Neue Partie'}</span></button>
       </header>
 
       <main className="game-grid">
-        <Sidebar state={state} />
+        <Sidebar state={visibleState} />
         <MapBoard
-          state={state}
+          state={visibleState}
           inspected={inspected}
           validRegions={validRegions}
           selectedRegions={selectedRegions}
@@ -1130,26 +1223,40 @@ export default function App() {
           onRouteClick={handleRouteClick}
         />
         <Scoreboard
-          state={state}
+          state={visibleState}
           validRoutes={validRoutes}
           selectedRoute={selectedRoute}
           onRouteClick={handleRouteClick}
+          onUpgradeDetour={handleUpgradeDetour}
+          canUpgradeDetour={canAct
+            && state.actionPoints >= constants.DETOUR_UPGRADE_COST
+            && state.detourUpgradedRound[state.activeFaction] !== state.round
+            && state.routeCapacity[state.activeFaction === 'blue' ? 'blue_detour' : 'red_detour'] < constants.MAX_DETOUR_CAPACITY}
           onShowRules={() => setShowRouteRules(true)}
         />
         <CardHand
-          state={state}
+          state={visibleState}
           selected={selectedCard}
           selectedRegions={selectedRegions}
           selectedRoute={selectedRoute}
           hybridResource={hybridResource}
+          covert={covert}
           error={error}
           onSelect={handleSelectCard}
           onResource={setHybridResource}
+          onCovert={(value) => {
+            setCovert(value)
+            setSelectedRegions([])
+            setHybridResource(undefined)
+            setError(undefined)
+          }}
           onConfirm={handleConfirm}
           onCancel={clearSelection}
           onEndTurn={handleEndTurn}
           locked={!canAct}
-          waitMessage={isOnline
+          waitMessage={isLocalPvp
+            ? 'Die Befehlshand bleibt bis zur bestätigten Übergabe verdeckt.'
+            : isOnline
             ? connection !== 'connected'
               ? 'Verbindung zur gemeinsamen Lage wird wiederhergestellt.'
               : `${FACTIONS[state.activeFaction].name} plant den nächsten Zug.`
@@ -1162,7 +1269,8 @@ export default function App() {
       <div className="small-screen-warning">
         <span>✦</span><h1>Größeres Display erforderlich</h1><p>Diese operative Lagekarte ist für Desktop und Laptop ab 1280 Pixel Breite ausgelegt.</p>
       </div>
-      <EndGameDialog state={state} onRestart={isOnline ? leaveToMenu : restartSingleplayer} actionLabel={isOnline ? 'Zur Modusauswahl' : 'Neue Partie beginnen'} />
+      <EndGameDialog state={state} onRestart={isOnline ? leaveToMenu : restartCurrentLocalGame} actionLabel={isOnline ? 'Zur Modusauswahl' : 'Neue Partie beginnen'} />
+      {isLocalPvp && !handoffReady && state.phase === 'action' && <HandoffOverlay faction={state.activeFaction} onReady={() => setHandoffReady(true)} />}
       {showRouteRules && <RouteRulesDialog onClose={() => setShowRouteRules(false)} />}
     </div>
   )

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { chooseAiPlay } from './ai'
+import { chooseAiAction, chooseAiPlay } from './ai'
 import { createInitialState, endTurn, playCard } from './engine'
 
 describe('Rote KI', () => {
@@ -15,5 +15,25 @@ describe('Rote KI', () => {
     const state = endTurn(createInitialState())
     state.hands.red = [{ instanceId: 'red-ai-deescalation', cardId: 'deescalation_channel' }]
     expect(chooseAiPlay(state)).toBeNull()
+  })
+
+  it('baut eine bedrohte Ausweichroute als allgemeine Aktion aus', () => {
+    const state = endTurn(createInitialState())
+    state.hands.red = []
+    state.regions.meridian_strait.resources.blue = { presence: 2, awareness: 0, access: 1, logistics: 0 }
+    expect(chooseAiAction(state)).toMatchObject({ type: 'upgrade-detour' })
+  })
+
+  it('kann einen wirksamen hybriden Auftrag verdeckt vorbereiten', () => {
+    const state = endTurn(createInitialState())
+    state.hands.red = [{ instanceId: 'red-ai-hybrid', cardId: 'hybrid_pressure' }]
+    state.routeCapacity.red_detour = 5
+    state.detourUpgradedRound.red = state.round
+    state.escalation = 6
+    state.regions.central_basin.resources.red.awareness = 1
+    state.regions.central_basin.resources.blue.awareness = 1
+    state.regions.central_basin.resources.blue.logistics = 1
+    const action = chooseAiAction(state)
+    expect(action).toMatchObject({ type: 'play-card', play: { covert: true } })
   })
 })

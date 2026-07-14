@@ -1,4 +1,4 @@
-import type { CardPlay, FactionId, GameState } from './types'
+import type { FactionId, GameCommand, GameState } from './types'
 
 export type RoomStatus = 'waiting' | 'playing' | 'complete'
 export type ConnectionStatus = 'connecting' | 'connected' | 'reconnecting' | 'offline'
@@ -19,9 +19,7 @@ export interface RoomSnapshot {
   connected: Record<FactionId, boolean>
 }
 
-export type RoomCommand =
-  | { type: 'play-card'; play: CardPlay; revision: number }
-  | { type: 'end-turn'; revision: number }
+export type RoomCommand = GameCommand & { revision: number }
 
 interface SessionResponse {
   session: OnlineSession

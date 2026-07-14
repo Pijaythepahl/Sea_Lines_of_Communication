@@ -73,13 +73,22 @@ const [blueInitial, redInitial] = await Promise.all([blueInitialPromise, redInit
 
 if (blueInitial.state.hands.red.length !== 0 || redInitial.state.hands.blue.length !== 0) throw new Error('Opponent hand was exposed')
 if (blueInitial.state.hands.blue.length === 0 || redInitial.state.hands.red.length === 0) throw new Error('Own hand is missing')
+if (blueInitial.state.covertOperations.length !== 0 || redInitial.state.covertOperations.length !== 0) throw new Error('Unexpected secret operation exposure')
 
-const blueUpdatePromise = nextJsonWhere(blueSocket, (message) => message.type === 'snapshot' && message.revision > blueInitial.revision)
-const redUpdatePromise = nextJsonWhere(redSocket, (message) => message.type === 'snapshot' && message.revision > redInitial.revision)
-blueSocket.send(JSON.stringify({ type: 'end-turn', revision: blueInitial.revision }))
+const blueUpgradePromise = nextJsonWhere(blueSocket, (message) => message.type === 'snapshot' && message.revision > blueInitial.revision)
+const redUpgradePromise = nextJsonWhere(redSocket, (message) => message.type === 'snapshot' && message.revision > redInitial.revision)
+blueSocket.send(JSON.stringify({ type: 'upgrade-detour', revision: blueInitial.revision }))
+const [blueUpgrade, redUpgrade] = await Promise.all([blueUpgradePromise, redUpgradePromise])
+
+if (blueUpgrade.state.routeCapacity.blue_detour !== 4 || redUpgrade.state.routeCapacity.blue_detour !== 4) throw new Error('Detour upgrade did not synchronize')
+if (blueUpgrade.state.actionPoints !== 1 || redUpgrade.state.actionPoints !== 1) throw new Error('Detour upgrade cost was not applied')
+
+const blueUpdatePromise = nextJsonWhere(blueSocket, (message) => message.type === 'snapshot' && message.revision > blueUpgrade.revision)
+const redUpdatePromise = nextJsonWhere(redSocket, (message) => message.type === 'snapshot' && message.revision > redUpgrade.revision)
+blueSocket.send(JSON.stringify({ type: 'end-turn', revision: blueUpgrade.revision }))
 const [blueUpdate, redUpdate] = await Promise.all([blueUpdatePromise, redUpdatePromise])
 
-if (blueUpdate.revision !== blueInitial.revision + 1 || redUpdate.revision !== blueUpdate.revision) throw new Error('Revision sync failed')
+if (blueUpdate.revision !== blueInitial.revision + 2 || redUpdate.revision !== blueUpdate.revision) throw new Error('Revision sync failed')
 if (blueUpdate.state.activeFaction !== 'red' || redUpdate.state.activeFaction !== 'red') throw new Error('Turn sync failed')
 
 blueSocket.close()
