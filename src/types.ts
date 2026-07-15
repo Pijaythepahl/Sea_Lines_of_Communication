@@ -28,6 +28,7 @@ export type CardId =
   | 'shadowing_operation'
   | 'hybrid_pressure'
   | 'deescalation_channel'
+  | 'detour_expansion'
 
 export interface ResourceLevels {
   presence: number
@@ -96,7 +97,6 @@ export interface CardPlay {
 
 export type GameCommand =
   | { type: 'play-card'; play: CardPlay }
-  | { type: 'upgrade-detour' }
   | { type: 'end-turn' }
 
 export interface TemporarySuspension {
@@ -163,10 +163,18 @@ export interface LeadershipRating {
     escalation: number
     responsibility: number
   }
+  metrics: {
+    averageYield: number
+    averageEscalation: number
+    escalationActions: number
+    escalationPoints: number
+    deescalationActions: number
+    netResponsibility: number
+  }
 }
 
 export interface GameState {
-  version: 5
+  version: 6
   maxRounds: RoundCount
   round: number
   phase: GamePhase
@@ -179,10 +187,13 @@ export interface GameState {
   discards: Record<FactionId, CardInstance[]>
   economicScore: Record<FactionId, number>
   routeCapacity: Record<RouteId, number>
-  detourUpgradedRound: Record<FactionId, number | null>
   escalation: number
   roundEscalation: Record<FactionId, number>
   totalEscalation: Record<FactionId, number>
+  escalationActions: Record<FactionId, number>
+  deescalationActions: Record<FactionId, number>
+  escalationHistory: number[]
+  leadershipHistoryComplete: boolean
   endedActionPoints: Record<FactionId, number>
   lastEvaluationEscalation: number
   lastYield: Record<FactionId, YieldResult>

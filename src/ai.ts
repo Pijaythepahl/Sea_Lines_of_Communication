@@ -9,7 +9,6 @@ import {
   otherFaction,
   playCard,
   resolveCovertOperations,
-  upgradeDetour,
 } from './engine'
 import type { CardInstance, CardPlay, GameCommand, GameState, RegionId } from './types'
 
@@ -85,14 +84,6 @@ export const chooseAiAction = (state: GameState): GameCommand | null => {
         // The rules engine remains the final authority for every generated option.
       }
     }
-  }
-
-  try {
-    const upgraded = upgradeDetour(visibleState)
-    const value = evaluateState(upgraded, faction) - baseline + 0.3
-    if (!best || value > best.value) best = { command: { type: 'upgrade-detour' }, value }
-  } catch {
-    // Upgrade is unavailable, already used, or fully developed.
   }
 
   return best && best.value >= -0.5 ? best.command : null

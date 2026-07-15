@@ -12,7 +12,6 @@ import {
   migrateGameState,
   playCard,
   resolveCovertOperations,
-  upgradeDetour,
 } from './engine'
 import type { CardId, CardInstance, GameState } from './types'
 
@@ -39,6 +38,14 @@ describe('relative Nutzbarkeit', () => {
     state.regions.central_basin.resources.blue.presence = 3
     expect(getUsability(state, 'central_basin', 'red')).toBe('denied')
   })
+
+  it('lässt den neutralen Freihafen auch bei großer Unterlegenheit höchstens umkämpft werden', () => {
+    const state = createInitialState()
+    state.regions.freeport_sea.resources.red = { presence: 3, awareness: 3, access: 2, logistics: 2 }
+    expect(getUsability(state, 'freeport_sea', 'blue')).toBe('contested')
+    state.regions.freeport_sea.resources.blue.access = 0
+    expect(calculateRouteYield(state, 'blue_detour')).toMatchObject({ blocked: true, reason: 'Kein durchgehender Marktzugang' })
+  })
 })
 
 describe('Engpass und Handelsrouten', () => {
@@ -59,15 +66,18 @@ describe('Engpass und Handelsrouten', () => {
     expect(calculateRouteYield(state, 'blue_main').yield).toBe(6)
   })
 
-  it('baut die Ausweichroute für 2 AP dauerhaft bis höchstens 5 aus', () => {
+  it('baut die Ausweichroute mit Zusätzlicher Tonnage für 1 AP dauerhaft bis höchstens 5 aus', () => {
     const state = createInitialState()
-    const upgraded = upgradeDetour(state)
+    const card = putCardInBlueHand(state, 'detour_expansion')
+    const upgraded = playCard(state, { instanceId: card.instanceId })
     expect(upgraded.routeCapacity.blue_detour).toBe(4)
-    expect(upgraded.actionPoints).toBe(1)
-    expect(() => upgradeDetour(upgraded)).toThrow(/bereits ausgebaut/)
-    upgraded.routeCapacity.blue_detour = 5
-    upgraded.detourUpgradedRound.blue = null
-    expect(() => upgradeDetour(upgraded)).toThrow(/maximale Kapazität/)
+    expect(upgraded.actionPoints).toBe(2)
+    const secondCard = putCardInBlueHand(upgraded, 'detour_expansion')
+    const fullyUpgraded = playCard(upgraded, { instanceId: secondCard.instanceId })
+    expect(fullyUpgraded.routeCapacity.blue_detour).toBe(5)
+    const extra = { instanceId: 'test-extra-detour', cardId: 'detour_expansion' as const }
+    fullyUpgraded.hands.blue.push(extra)
+    expect(() => playCard(fullyUpgraded, { instanceId: extra.instanceId })).toThrow(/maximale Kapazität/)
   })
 
   it('verwendet die ausgebaute Kapazität, sobald die Hauptroute blockiert ist', () => {
@@ -137,6 +147,7 @@ describe('Karten und Rundenfolge', () => {
     const calmer = playCard(state, { instanceId: card.instanceId })
     expect(calmer.escalation).toBe(2)
     expect(calmer.actionPoints).toBe(2)
+    expect(calmer.deescalationActions.blue).toBe(1)
     expect(calmer.discards.blue.at(-1)?.cardId).toBe('deescalation_channel')
   })
 
@@ -234,20 +245,20 @@ describe('Karten und Rundenfolge', () => {
 })
 
 describe('Migration und Abschlussbewertung', () => {
-  it('migriert ältere Spielstände auf MVP 5 und sechs Runden', () => {
+  it('migriert ältere Spielstände auf MVP 6 und sechs Runden', () => {
     const legacy = structuredClone(createInitialState()) as unknown as Record<string, unknown>
     legacy.version = 4
     delete legacy.maxRounds
     delete legacy.routeCapacity
     delete legacy.covertOperations
     const migrated = migrateGameState(legacy)
-    expect(migrated.version).toBe(5)
+    expect(migrated.version).toBe(6)
     expect(migrated.maxRounds).toBe(6)
     expect(migrated.routeCapacity).toMatchObject({ blue_main: 6, blue_detour: 3 })
     expect(migrated.covertOperations).toEqual([])
   })
 
-  it('beendet Partien nach der gewählten Rundenzahl und stattet 18 Runden mit genug Karten aus', () => {
+  it('beendet Partien nach der gewählten Rundenzahl und baut Decks 24/34/44 mit mehr Patrouillen', () => {
     const state = createInitialState(12)
     state.round = 12
     const secondTurn = endTurn(state)
@@ -255,9 +266,28 @@ describe('Migration und Abschlussbewertung', () => {
     expect(complete.phase).toBe('complete')
     expect(complete.round).toBe(12)
 
-    const longGame = createInitialState(18)
-    expect(longGame.maxRounds).toBe(18)
-    expect(longGame.decks.blue.length + longGame.hands.blue.length).toBe(30)
+    for (const [rounds, size, patrols] of [[6, 24, 4], [12, 34, 5], [18, 44, 6]] as const) {
+      const game = createInitialState(rounds)
+      const cards = [...game.decks.blue, ...game.hands.blue]
+      expect(cards).toHaveLength(size)
+      expect(cards.filter((card) => card.cardId === 'patrol_group')).toHaveLength(patrols)
+      expect(cards.filter((card) => card.cardId === 'detour_expansion')).toHaveLength(2)
+      expect(game.hands.blue).toHaveLength(rounds === 6 ? 6 : 7)
+      expect(endTurn(game).hands.red).toHaveLength(rounds === 6 ? 6 : 7)
+    }
+  })
+
+  it('ergänzt bei der Migration nur die noch nutzbaren Ausbaukarten', () => {
+    const legacy = structuredClone(createInitialState(12)) as any
+    legacy.version = 5
+    legacy.round = 2
+    legacy.routeCapacity.blue_detour = 4
+    legacy.decks.blue = legacy.decks.blue.filter((card: CardInstance) => card.cardId !== 'detour_expansion')
+    legacy.hands.blue = legacy.hands.blue.filter((card: CardInstance) => card.cardId !== 'detour_expansion')
+    const migrated = migrateGameState(legacy)
+    const blueCards = [...migrated.decks.blue, ...migrated.hands.blue, ...migrated.discards.blue]
+    expect(blueCards.filter((card) => card.cardId === 'detour_expansion')).toHaveLength(1)
+    expect(migrated.leadershipHistoryComplete).toBe(false)
   })
 
   it('skaliert die Wirtschaftsanteile der Führungswertung mit der Rundenzahl', () => {
@@ -281,5 +311,18 @@ describe('Migration und Abschlussbewertung', () => {
     state.winner = { faction: 'blue', reason: 'Test' }
     expect(calculateLeadershipRating(state, 'blue')).toMatchObject({ score: 6, stars: 3, label: 'Kostspielige Führung' })
     expect(calculateLeadershipRating(state, 'red').stars).toBeGreaterThanOrEqual(1)
+  })
+
+  it('bewertet Eskalationsverlauf und deeskalierendes Verhalten über die gesamte Partie', () => {
+    const state = createInitialState(12)
+    state.winner = { faction: 'blue', reason: 'Test' }
+    state.escalationHistory = [1, 3, 5, 3]
+    state.totalEscalation.blue = 6
+    state.escalationActions.blue = 4
+    state.deescalationActions.blue = 2
+    const rating = calculateLeadershipRating(state, 'blue')
+    expect(rating.components.escalation).toBe(1.5)
+    expect(rating.components.responsibility).toBe(1.5)
+    expect(rating.metrics).toMatchObject({ averageEscalation: 3, escalationActions: 4, escalationPoints: 6, deescalationActions: 2, netResponsibility: 4 })
   })
 })

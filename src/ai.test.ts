@@ -17,18 +17,17 @@ describe('Rote KI', () => {
     expect(chooseAiPlay(state)).toBeNull()
   })
 
-  it('baut eine bedrohte Ausweichroute als allgemeine Aktion aus', () => {
+  it('spielt bei bedrohter Hauptroute die Ausbaukarte', () => {
     const state = endTurn(createInitialState())
-    state.hands.red = []
+    state.hands.red = [{ instanceId: 'red-ai-detour', cardId: 'detour_expansion' }]
     state.regions.meridian_strait.resources.blue = { presence: 2, awareness: 0, access: 1, logistics: 0 }
-    expect(chooseAiAction(state)).toMatchObject({ type: 'upgrade-detour' })
+    expect(chooseAiAction(state)).toMatchObject({ type: 'play-card', play: { instanceId: 'red-ai-detour' } })
   })
 
   it('kann einen wirksamen hybriden Auftrag verdeckt vorbereiten', () => {
     const state = endTurn(createInitialState())
     state.hands.red = [{ instanceId: 'red-ai-hybrid', cardId: 'hybrid_pressure' }]
     state.routeCapacity.red_detour = 5
-    state.detourUpgradedRound.red = state.round
     state.escalation = 6
     state.regions.central_basin.resources.red.awareness = 1
     state.regions.central_basin.resources.blue.awareness = 1

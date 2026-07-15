@@ -123,6 +123,7 @@ export const CARD_ORDER: CardId[] = [
   'shadowing_operation',
   'hybrid_pressure',
   'deescalation_channel',
+  'detour_expansion',
 ]
 
 export const CARDS: Record<CardId, CardDefinition> = {
@@ -184,6 +185,12 @@ export const CARDS: Record<CardId, CardDefinition> = {
     id: 'deescalation_channel', title: 'Krisenkommunikation', domain: 'Deeskalation', icon: '↘', cost: 1, target: 'none',
     description: 'Senke die gemeinsame Eskalation um 1.', instruction: 'Diese Karte benötigt keine Zielregion.',
     playHint: 'Spielbar, sobald die Eskalation mindestens 1 beträgt. Die Karte wird direkt bestätigt und benötigt kein Ziel auf der Karte.',
+    escalation: 0,
+  },
+  detour_expansion: {
+    id: 'detour_expansion', title: 'Zusätzliche Tonnage', domain: 'Handel', icon: '≋', cost: 1, target: 'none',
+    description: 'Erhöhe die Kapazität deiner Ausweich-SLOC dauerhaft um 1.', instruction: 'Diese Karte benötigt keine Zielauswahl.',
+    playHint: 'Spielbar, solange deine Ausweich-SLOC noch nicht Kapazität 5 erreicht hat. Jede Koalition besitzt genau zwei Exemplare.',
     escalation: 0,
   },
 }

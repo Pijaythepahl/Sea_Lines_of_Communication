@@ -1,5 +1,5 @@
 import { DurableObject } from 'cloudflare:workers'
-import { createFactionView, createInitialState, endTurn, migrateGameState, playCard, upgradeDetour } from '../src/engine'
+import { createFactionView, createInitialState, endTurn, migrateGameState, playCard } from '../src/engine'
 import type { FactionId, GameCommand, GameState, RoundCount } from '../src/types'
 
 interface Env {
@@ -14,6 +14,7 @@ interface RoomRecord {
   state: GameState
   tokens: { blue: string; red?: string }
   updatedAt: number
+  rematchProposal?: { requestedBy: FactionId; maxRounds: RoundCount }
 }
 
 interface SocketAttachment {
@@ -21,7 +22,12 @@ interface SocketAttachment {
   token: string
 }
 
-type RoomCommand = GameCommand & { revision: number }
+type RoomCommand =
+  | (GameCommand & { revision: number })
+  | { type: 'request-rematch'; maxRounds: RoundCount; revision: number }
+  | { type: 'accept-rematch'; revision: number }
+  | { type: 'decline-rematch'; revision: number }
+  | { type: 'cancel-rematch'; revision: number }
 
 const json = (value: unknown, status = 200) => Response.json(value, {
   status,
@@ -44,7 +50,7 @@ export class GameRoom extends DurableObject<Env> {
     super(ctx, env)
     this.ready = ctx.blockConcurrencyWhile(async () => {
       this.room = await ctx.storage.get<RoomRecord>('room') ?? null
-      if (this.room && this.room.state.version !== 5) {
+      if (this.room && this.room.state.version !== 6) {
         this.room.state = migrateGameState(this.room.state)
         await ctx.storage.put('room', this.room)
       }
@@ -71,6 +77,7 @@ export class GameRoom extends DurableObject<Env> {
       state,
       seats: { blue: true, red: Boolean(this.room.tokens.red) },
       connected: this.connections(),
+      rematchProposal: this.room.rematchProposal,
     }
   }
 
@@ -161,17 +168,64 @@ export class GameRoom extends DurableObject<Env> {
 
     try {
       const command = JSON.parse(typeof message === 'string' ? message : new TextDecoder().decode(message)) as RoomCommand
-      if (this.room.status !== 'playing') throw new Error('Die Partie wartet noch auf die zweite Seite.')
       if (command.revision !== this.room.revision) {
         socket.send(JSON.stringify(this.snapshot(attachment.faction)))
         throw new Error('Der Spielstand wurde inzwischen aktualisiert. Bitte erneut versuchen.')
       }
+
+      if (command.type === 'request-rematch') {
+        if (!this.room.tokens.red) throw new Error('Eine neue Partie kann erst mit zwei besetzten Seiten vorgeschlagen werden.')
+        if (![6, 12, 18].includes(command.maxRounds)) throw new Error('Ungültige Rundenzahl.')
+        if (this.room.rematchProposal && this.room.rematchProposal.requestedBy !== attachment.faction) {
+          throw new Error('Die andere Koalition hat bereits eine neue Partie vorgeschlagen.')
+        }
+        this.room.rematchProposal = { requestedBy: attachment.faction, maxRounds: command.maxRounds }
+        this.room.revision += 1
+        await this.persist()
+        this.broadcast()
+        return
+      }
+
+      if (command.type === 'cancel-rematch') {
+        if (!this.room.rematchProposal || this.room.rematchProposal.requestedBy !== attachment.faction) {
+          throw new Error('Es gibt keinen eigenen Vorschlag zum Zurückziehen.')
+        }
+        this.room.rematchProposal = undefined
+        this.room.revision += 1
+        await this.persist()
+        this.broadcast()
+        return
+      }
+
+      if (command.type === 'decline-rematch') {
+        if (!this.room.rematchProposal || this.room.rematchProposal.requestedBy === attachment.faction) {
+          throw new Error('Es gibt keinen gegnerischen Vorschlag zum Ablehnen.')
+        }
+        this.room.rematchProposal = undefined
+        this.room.revision += 1
+        await this.persist()
+        this.broadcast()
+        return
+      }
+
+      if (command.type === 'accept-rematch') {
+        if (!this.room.rematchProposal || this.room.rematchProposal.requestedBy === attachment.faction) {
+          throw new Error('Es gibt keinen gegnerischen Vorschlag zum Annehmen.')
+        }
+        this.room.state = createInitialState(this.room.rematchProposal.maxRounds)
+        this.room.status = 'playing'
+        this.room.rematchProposal = undefined
+        this.room.revision += 1
+        await this.persist()
+        this.broadcast()
+        return
+      }
+
+      if (this.room.status !== 'playing') throw new Error('Die Partie wartet auf eine neue Partie oder die zweite Seite.')
       if (this.room.state.activeFaction !== attachment.faction) throw new Error('Die andere Koalition ist am Zug.')
 
       if (command.type === 'play-card') {
         this.room.state = playCard(this.room.state, command.play)
-      } else if (command.type === 'upgrade-detour') {
-        this.room.state = upgradeDetour(this.room.state)
       } else if (command.type === 'end-turn') {
         this.room.state = endTurn(this.room.state)
       } else {

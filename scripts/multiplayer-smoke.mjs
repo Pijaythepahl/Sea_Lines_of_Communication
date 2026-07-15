@@ -64,7 +64,7 @@ const created = await request('/api/rooms', {
   body: JSON.stringify({ maxRounds: 12 }),
 })
 if (created.snapshot.status !== 'waiting' || created.session.faction !== 'blue') throw new Error('Room creation contract failed')
-if (created.snapshot.state.maxRounds !== 12 || created.snapshot.state.version !== 5) throw new Error('Room configuration contract failed')
+if (created.snapshot.state.maxRounds !== 12 || created.snapshot.state.version !== 6) throw new Error('Room configuration contract failed')
 
 const joined = await request(`/api/rooms/${created.session.roomCode}/join`, { method: 'POST' })
 if (joined.snapshot.status !== 'playing' || joined.session.faction !== 'red') throw new Error('Room join contract failed')
@@ -80,21 +80,38 @@ if (blueInitial.state.hands.red.length !== 0 || redInitial.state.hands.blue.leng
 if (blueInitial.state.hands.blue.length === 0 || redInitial.state.hands.red.length === 0) throw new Error('Own hand is missing')
 if (blueInitial.state.covertOperations.length !== 0 || redInitial.state.covertOperations.length !== 0) throw new Error('Unexpected secret operation exposure')
 
-const blueUpgradePromise = nextJsonWhere(blueSocket, (message) => message.type === 'snapshot' && message.revision > blueInitial.revision)
-const redUpgradePromise = nextJsonWhere(redSocket, (message) => message.type === 'snapshot' && message.revision > redInitial.revision)
-blueSocket.send(JSON.stringify({ type: 'upgrade-detour', revision: blueInitial.revision }))
-const [blueUpgrade, redUpgrade] = await Promise.all([blueUpgradePromise, redUpgradePromise])
-
-if (blueUpgrade.state.routeCapacity.blue_detour !== 4 || redUpgrade.state.routeCapacity.blue_detour !== 4) throw new Error('Detour upgrade did not synchronize')
-if (blueUpgrade.state.actionPoints !== 1 || redUpgrade.state.actionPoints !== 1) throw new Error('Detour upgrade cost was not applied')
-
-const blueUpdatePromise = nextJsonWhere(blueSocket, (message) => message.type === 'snapshot' && message.revision > blueUpgrade.revision)
-const redUpdatePromise = nextJsonWhere(redSocket, (message) => message.type === 'snapshot' && message.revision > redUpgrade.revision)
-blueSocket.send(JSON.stringify({ type: 'end-turn', revision: blueUpgrade.revision }))
+const blueUpdatePromise = nextJsonWhere(blueSocket, (message) => message.type === 'snapshot' && message.revision > blueInitial.revision)
+const redUpdatePromise = nextJsonWhere(redSocket, (message) => message.type === 'snapshot' && message.revision > redInitial.revision)
+blueSocket.send(JSON.stringify({ type: 'end-turn', revision: blueInitial.revision }))
 const [blueUpdate, redUpdate] = await Promise.all([blueUpdatePromise, redUpdatePromise])
 
-if (blueUpdate.revision !== blueInitial.revision + 2 || redUpdate.revision !== blueUpdate.revision) throw new Error('Revision sync failed')
+if (blueUpdate.revision !== blueInitial.revision + 1 || redUpdate.revision !== blueUpdate.revision) throw new Error('Revision sync failed')
 if (blueUpdate.state.activeFaction !== 'red' || redUpdate.state.activeFaction !== 'red') throw new Error('Turn sync failed')
+
+const blueProposalPromise = nextJsonWhere(blueSocket, (message) => message.type === 'snapshot' && message.revision > blueUpdate.revision)
+const redProposalPromise = nextJsonWhere(redSocket, (message) => message.type === 'snapshot' && message.revision > redUpdate.revision)
+blueSocket.send(JSON.stringify({ type: 'request-rematch', maxRounds: 18, revision: blueUpdate.revision }))
+const [blueProposal, redProposal] = await Promise.all([blueProposalPromise, redProposalPromise])
+if (blueProposal.rematchProposal?.requestedBy !== 'blue' || redProposal.rematchProposal?.maxRounds !== 18) throw new Error('Rematch proposal did not synchronize')
+
+const blueDeclinePromise = nextJsonWhere(blueSocket, (message) => message.type === 'snapshot' && message.revision > blueProposal.revision)
+const redDeclinePromise = nextJsonWhere(redSocket, (message) => message.type === 'snapshot' && message.revision > redProposal.revision)
+redSocket.send(JSON.stringify({ type: 'decline-rematch', revision: redProposal.revision }))
+const [blueDecline, redDecline] = await Promise.all([blueDeclinePromise, redDeclinePromise])
+if (blueDecline.rematchProposal || redDecline.rematchProposal) throw new Error('Declined rematch proposal remained active')
+
+const blueSecondProposalPromise = nextJsonWhere(blueSocket, (message) => message.type === 'snapshot' && message.revision > blueDecline.revision)
+const redSecondProposalPromise = nextJsonWhere(redSocket, (message) => message.type === 'snapshot' && message.revision > redDecline.revision)
+blueSocket.send(JSON.stringify({ type: 'request-rematch', maxRounds: 6, revision: blueDecline.revision }))
+const [blueSecondProposal, redSecondProposal] = await Promise.all([blueSecondProposalPromise, redSecondProposalPromise])
+
+const blueRematchPromise = nextJsonWhere(blueSocket, (message) => message.type === 'snapshot' && message.revision > blueSecondProposal.revision)
+const redRematchPromise = nextJsonWhere(redSocket, (message) => message.type === 'snapshot' && message.revision > redSecondProposal.revision)
+redSocket.send(JSON.stringify({ type: 'accept-rematch', revision: redSecondProposal.revision }))
+const [blueRematch, redRematch] = await Promise.all([blueRematchPromise, redRematchPromise])
+if (blueRematch.roomCode !== created.session.roomCode || redRematch.roomCode !== joined.session.roomCode) throw new Error('Room code changed during rematch')
+if (blueRematch.status !== 'playing' || blueRematch.state.maxRounds !== 6 || blueRematch.state.round !== 1) throw new Error('Accepted rematch did not reset the game')
+if (blueRematch.state.hands.red.length !== 0 || redRematch.state.hands.blue.length !== 0) throw new Error('Rematch exposed opponent hands')
 
 blueSocket.close()
 redSocket.close()

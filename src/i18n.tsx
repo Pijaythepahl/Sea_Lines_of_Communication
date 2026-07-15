@@ -106,6 +106,11 @@ const EN_CARDS: Record<CardId, Pick<CardDefinition, 'title' | 'domain' | 'descri
     instruction: 'This card does not require a target region.',
     playHint: 'Playable once Escalation is at least 1. The card is confirmed immediately and requires no map target.',
   },
+  detour_expansion: {
+    title: 'Additional Tonnage', domain: 'Trade', description: 'Permanently increase the capacity of your Detour SLOC by 1.',
+    instruction: 'This card does not require a target.',
+    playHint: 'Playable while your Detour SLOC is below capacity 5. Each coalition has exactly two copies.',
+  },
 }
 
 export const factionText = (faction: FactionId, language: Language) => language === 'de' ? FACTIONS[faction] : EN_FACTIONS[faction]
@@ -144,7 +149,6 @@ export const formatLogEntry = (entry: LogEntry, language: Language): string => {
     case 'round-start': return `Round ${numberParam(entry, 'round')} begins. ${faction} acts first.`
     case 'covert-prepared': return `${faction} has prepared a covert operation.`
     case 'covert-resolved': return `${faction}: A covert operation ${entry.params?.effective ? 'took effect' : 'had no observable effect'}.`
-    case 'detour-upgraded': return `${faction} upgrades its Detour SLOC to capacity ${numberParam(entry, 'capacity')}.`
     case 'quiet-round': return 'A quiet round reduces shared Escalation by 1.'
     case 'evaluation': return `Economic evaluation: Blue ${signed(numberParam(entry, 'blue'))} · Red ${signed(numberParam(entry, 'red'))} · ${escalationLabel(numberParam(entry, 'escalation'), language)}`
     case 'game-complete': return `The ${numberParam(entry, 'rounds')}th economic evaluation ends the game.`
@@ -182,19 +186,23 @@ export const formatYieldReason = (result: YieldResult, language: Language): stri
 const ERROR_TRANSLATIONS: Record<string, string> = {
   'Die Partie ist bereits beendet.': 'The game has already ended.',
   'Nicht genügend Aktionspunkte.': 'Not enough action points.',
-  'Nicht genügend Aktionspunkte für den Ausbau.': 'Not enough action points for the upgrade.',
   'Die Zielauswahl ist unvollständig.': 'The target selection is incomplete.',
   'Dieses Ziel ist für die Karte nicht zulässig.': 'This target is not valid for the card.',
   'Die andere Koalition ist am Zug.': 'The other coalition is taking its turn.',
   'Die Online-Verbindung ist noch nicht bereit.': 'The online connection is not ready yet.',
   'Der Spielstand wurde inzwischen aktualisiert. Bitte erneut versuchen.': 'The game state has changed. Please try again.',
-  'Die Ausweich-SLOC wurde in dieser Runde bereits ausgebaut.': 'The Detour SLOC has already been upgraded this round.',
   'Die Ausweich-SLOC hat bereits ihre maximale Kapazität erreicht.': 'The Detour SLOC has already reached maximum capacity.',
   'Ungültige Rundenzahl.': 'Invalid round count.',
   'Der Spielraum konnte nicht erreicht werden.': 'The game room could not be reached.',
   'Dieser Spielraum existiert nicht.': 'This game room does not exist.',
   'In diesem Spielraum sind bereits zwei Personen.': 'This game room already has two players.',
   'Die Partie wartet noch auf die zweite Seite.': 'The game is waiting for the second player.',
+  'Die Partie wartet auf eine neue Partie oder die zweite Seite.': 'The game is waiting for a rematch or the second player.',
+  'Eine neue Partie kann erst mit zwei besetzten Seiten vorgeschlagen werden.': 'A new game can only be proposed once both seats are occupied.',
+  'Die andere Koalition hat bereits eine neue Partie vorgeschlagen.': 'The other coalition has already proposed a new game.',
+  'Es gibt keinen eigenen Vorschlag zum Zurückziehen.': 'There is no proposal of your own to withdraw.',
+  'Es gibt keinen gegnerischen Vorschlag zum Ablehnen.': 'There is no opposing proposal to decline.',
+  'Es gibt keinen gegnerischen Vorschlag zum Annehmen.': 'There is no opposing proposal to accept.',
   'Die Zugangsberechtigung für diesen Raum ist ungültig.': 'The access credentials for this room are invalid.',
   'Der empfangene Spielstand konnte nicht gelesen werden.': 'The received game state could not be read.',
   'Der Spielraum konnte nicht eröffnet werden.': 'The game room could not be opened.',

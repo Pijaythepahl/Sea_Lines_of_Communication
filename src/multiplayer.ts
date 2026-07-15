@@ -9,6 +9,11 @@ export interface OnlineSession {
   token: string
 }
 
+export interface RematchProposal {
+  requestedBy: FactionId
+  maxRounds: RoundCount
+}
+
 export interface RoomSnapshot {
   type: 'snapshot'
   roomCode: string
@@ -17,9 +22,15 @@ export interface RoomSnapshot {
   state: GameState
   seats: Record<FactionId, boolean>
   connected: Record<FactionId, boolean>
+  rematchProposal?: RematchProposal
 }
 
-export type RoomCommand = GameCommand & { revision: number }
+export type RoomCommand =
+  | (GameCommand & { revision: number })
+  | { type: 'request-rematch'; maxRounds: RoundCount; revision: number }
+  | { type: 'accept-rematch'; revision: number }
+  | { type: 'decline-rematch'; revision: number }
+  | { type: 'cancel-rematch'; revision: number }
 
 interface SessionResponse {
   session: OnlineSession

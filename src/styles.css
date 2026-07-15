@@ -124,6 +124,14 @@ button:focus-visible, [role="button"]:focus-visible { outline: 3px solid var(--b
   font-size: 12px; font-weight: 700; cursor: pointer;
 }
 .new-game:hover { color: #fff; border-color: var(--brass); }
+.game-menu { position: relative; }
+.game-menu-trigger { display: flex; align-items: center; gap: 7px; height: 38px; padding: 0 13px; color: #ced9dd; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.16); border-radius: 3px; font-size: 12px; font-weight: 800; cursor: pointer; }
+.game-menu-trigger:hover, .game-menu-trigger[aria-expanded="true"] { color: #fff; border-color: var(--brass); }
+.game-menu-trigger span { color: var(--brass-light); font-size: 17px; }
+.game-menu-popover { position: absolute; top: 45px; right: 0; z-index: 80; width: 220px; padding: 6px; color: var(--ink); background: var(--ivory); border: 1px solid var(--brass); box-shadow: 0 15px 35px rgba(0,0,0,.32); }
+.game-menu-popover button { width: 100%; padding: 11px 10px; color: var(--navy-900); text-align: left; background: transparent; border: 0; border-bottom: 1px solid var(--line); font-size: 11px; font-weight: 750; cursor: pointer; }
+.game-menu-popover button:last-child { border-bottom: 0; }
+.game-menu-popover button:hover, .game-menu-popover button:focus-visible { color: #fff; background: var(--navy-700); }
 
 .game-grid {
   display: grid;
@@ -439,6 +447,11 @@ button:focus-visible, [role="button"]:focus-visible { outline: 3px solid var(--b
 .rules-notes p { margin: 0; padding: 8px; color: #51616a; background: rgba(16,37,54,.04); border-left: 2px solid var(--navy-700); font-size: 8px; line-height: 1.45; }
 .route-rules-dialog > footer { padding: 11px 20px 16px; text-align: right; }
 .route-rules-dialog > footer .confirm-button { min-height: 36px; }
+.help-dialog { width: min(900px, 94vw); }
+.help-section-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 9px; margin: 16px 20px 12px; }
+.help-section-grid article { padding: 11px 13px; background: rgba(179,138,69,.08); border: 1px solid rgba(179,138,69,.25); }
+.help-section-grid h3 { margin: 0 0 5px; font-family: Georgia, serif; font-size: 12px; text-transform: uppercase; }
+.help-section-grid p { margin: 0; color: #465a64; font-size: 9px; line-height: 1.5; }
 
 .mode-screen {
   position: relative;
@@ -672,6 +685,18 @@ button:focus-visible, [role="button"]:focus-visible { outline: 3px solid var(--b
 .leadership-ratings strong { display: block; margin: 5px 0; color: var(--brass); font-size: 19px; letter-spacing: .08em; }
 .leadership-ratings b { font-family: Georgia, serif; font-size: 12px; }
 .leadership-ratings small { margin-top: 5px; color: #5a6a72; font-size: 7px; line-height: 1.5; }
+.rating-breakdown { margin-top: 10px; border-top: 1px solid var(--line); }
+.rating-breakdown p { display: grid; grid-template-columns: 115px 1fr; gap: 8px; align-items: start; margin: 0; padding: 7px 0; border-bottom: 1px dotted var(--line); }
+.rating-breakdown p b { font-family: inherit; font-size: 8px; text-transform: uppercase; letter-spacing: .04em; }
+.rating-breakdown p small { margin: 0; font-size: 8px; }
+.rating-advice { margin-top: 9px; padding: 8px; background: rgba(179,138,69,.08); border-left: 3px solid var(--brass); }
+.rating-advice em { display: block; color: var(--brass); font-size: 7px; font-style: normal; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; }
+.rating-advice p { margin: 4px 0 0; color: #43555e; font-size: 8px; line-height: 1.4; }
+.leadership-ratings small.history-warning { margin-top: 8px; color: #8a6226; }
+.result-actions, .dialog-actions { display: flex; justify-content: center; gap: 9px; }
+.result-actions .ghost-button, .dialog-actions .ghost-button { color: var(--navy-800); border-color: var(--line); }
+.rematch-backdrop { z-index: 150; }
+.dialog-actions { margin-top: 16px; }
 .handoff-dialog { width: min(520px, 90vw); padding: 36px; text-align: center; color: var(--ink); background: var(--ivory); border: 2px solid var(--brass); border-top: 6px solid var(--blue); box-shadow: 0 25px 70px rgba(0,0,0,.48), inset 0 0 0 5px rgba(9,37,55,.08); }
 .handoff-dialog.is-red { border-top-color: var(--red); }
 .handoff-dialog h2 { margin: 7px 0 10px; font-family: Georgia, serif; font-size: 25px; text-transform: uppercase; }
