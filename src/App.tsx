@@ -74,20 +74,49 @@ const V2_STORAGE_KEY = 'sloc-game-v2'
 const LEGACY_STORAGE_KEY = 'sloc-mvp1-game-v1'
 const ONLINE_SESSION_KEY = 'sloc-online-session-v1'
 const LANGUAGE_KEY = 'sloc-language-v1'
-const MENU_MUSIC_VOLUME = 0.32
-const MENU_MUSIC_FADE_MS = 650
+const MUSIC_VOLUME_KEY = 'sloc-music-volume-v1'
+const MUSIC_MUTED_KEY = 'sloc-music-muted-v1'
+const DEFAULT_MUSIC_VOLUME = 0.32
+const MUSIC_FADE_MS = 650
+const MUSIC_TRACKS = {
+  title: '/audio/music/title-theme.ogg',
+  high: '/audio/music/escalation-high.ogg',
+  maximum: '/audio/music/escalation-maximum.ogg',
+} as const
 
-const useMenuMusic = (active: boolean) => {
+const loadMusicVolume = () => {
+  try {
+    const stored = localStorage.getItem(MUSIC_VOLUME_KEY)
+    if (stored === null) return DEFAULT_MUSIC_VOLUME
+    const value = Number(stored)
+    return Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : DEFAULT_MUSIC_VOLUME
+  } catch {
+    return DEFAULT_MUSIC_VOLUME
+  }
+}
+
+const loadMusicMuted = () => {
+  try {
+    return localStorage.getItem(MUSIC_MUTED_KEY) === 'true'
+  } catch {
+    return false
+  }
+}
+
+const useGameMusic = (track: string, volume: number) => {
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const animationFrameRef = useRef<number | undefined>(undefined)
+  const currentTrackRef = useRef<string>(MUSIC_TRACKS.title)
+  const volumeRef = useRef(volume)
 
   useEffect(() => {
     const audio = document.createElement('audio')
 
-    audio.src = '/audio/music/title-theme.ogg'
+    audio.src = MUSIC_TRACKS.title
     audio.loop = true
     audio.preload = 'auto'
     audio.volume = 0
+    audio.muted = volume === 0
     audioRef.current = audio
     audio.load()
 
@@ -100,9 +129,18 @@ const useMenuMusic = (active: boolean) => {
   }, [])
 
   useEffect(() => {
+    volumeRef.current = volume
+    const audio = audioRef.current
+    if (!audio) return
+    audio.muted = volume === 0
+    if (!audio.paused) audio.volume = volume
+  }, [volume])
+
+  useEffect(() => {
     const audio = audioRef.current
     if (!audio) return
     let disposed = false
+    let unlockListenersAdded = false
 
     const cancelFade = () => {
       if (animationFrameRef.current === undefined) return
@@ -110,64 +148,72 @@ const useMenuMusic = (active: boolean) => {
       animationFrameRef.current = undefined
     }
 
-    const fadeTo = (target: number, onComplete?: () => void) => {
+    const fadeTo = (target: number) => new Promise<void>((resolve) => {
       cancelFade()
       const initialVolume = audio.volume
       const startedAt = performance.now()
 
       const step = (now: number) => {
         if (disposed) return
-        const progress = Math.min((now - startedAt) / MENU_MUSIC_FADE_MS, 1)
+        const progress = Math.min((now - startedAt) / MUSIC_FADE_MS, 1)
         audio.volume = initialVolume + (target - initialVolume) * progress
         if (progress < 1) {
           animationFrameRef.current = requestAnimationFrame(step)
           return
         }
         animationFrameRef.current = undefined
-        onComplete?.()
+        resolve()
       }
 
       animationFrameRef.current = requestAnimationFrame(step)
+    })
+
+    const removeUnlockListeners = () => {
+      if (!unlockListenersAdded) return
+      window.removeEventListener('pointerdown', startAfterInteraction, true)
+      window.removeEventListener('keydown', startAfterInteraction, true)
+      unlockListenersAdded = false
+    }
+
+    const addUnlockListeners = () => {
+      if (unlockListenersAdded || disposed) return
+      window.addEventListener('pointerdown', startAfterInteraction, { capture: true, once: true })
+      window.addEventListener('keydown', startAfterInteraction, { capture: true, once: true })
+      unlockListenersAdded = true
     }
 
     const start = async () => {
-      if (disposed || !active) return
+      if (disposed) return
       try {
-        if (audio.paused) {
-          audio.volume = 0
-          await audio.play()
-        }
-        if (disposed || !active) {
+        if (currentTrackRef.current !== track) {
+          await fadeTo(0)
+          if (disposed) return
           audio.pause()
+          audio.src = track
           audio.currentTime = 0
-          return
+          audio.volume = 0
+          currentTrackRef.current = track
+          audio.load()
         }
-        fadeTo(MENU_MUSIC_VOLUME)
+        if (audio.paused) await audio.play()
+        if (disposed) return
+        removeUnlockListeners()
+        await fadeTo(volumeRef.current)
       } catch {
-        // Autoplay is retried after the first pointer or keyboard interaction.
+        addUnlockListeners()
       }
     }
 
     const startAfterInteraction = () => void start()
 
-    if (active) {
-      void start()
-      window.addEventListener('pointerdown', startAfterInteraction, { capture: true, once: true })
-      window.addEventListener('keydown', startAfterInteraction, { capture: true, once: true })
-    } else {
-      fadeTo(0, () => {
-        audio.pause()
-        audio.currentTime = 0
-      })
-    }
+    void start()
 
     return () => {
       disposed = true
       cancelFade()
-      window.removeEventListener('pointerdown', startAfterInteraction, true)
-      window.removeEventListener('keydown', startAfterInteraction, true)
+      removeUnlockListeners()
     }
-  }, [active])
+  }, [track])
 }
 
 const loadState = (storageKey = STORAGE_KEY): GameState => {
@@ -638,7 +684,101 @@ const HelpDialog = ({ onClose }: { onClose: () => void }) => {
   )
 }
 
-const GameMenu = ({ onMainMenu, onNewGame, onHelp }: { onMainMenu: () => void; onNewGame: () => void; onHelp: () => void }) => {
+interface MusicSettingsProps {
+  musicVolume: number
+  musicMuted: boolean
+  onMusicVolume: (volume: number) => void
+  onMusicMuted: (muted: boolean) => void
+}
+
+const SpeakerIcon = ({ muted }: { muted: boolean }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
+    <path d="M4 9v6h4l5 4V5L8 9H4Z" fill="currentColor" stroke="none" />
+    {muted
+      ? <path d="m17 9 4 6m0-6-4 6" />
+      : <><path d="M16 9.5a4 4 0 0 1 0 5" /><path d="M18.5 7a7.5 7.5 0 0 1 0 10" /></>}
+  </svg>
+)
+
+const MusicVolumeControl = ({ musicVolume, musicMuted, onMusicVolume, onMusicMuted }: MusicSettingsProps) => {
+  const language = useLanguage()
+  const displayedVolume = musicMuted ? 0 : Math.round(musicVolume * 100)
+  const changeVolume = (value: number) => {
+    const volume = Math.max(0, Math.min(1, value / 100))
+    onMusicVolume(volume)
+    onMusicMuted(volume === 0)
+  }
+
+  return <section className="music-volume-control" aria-label={pick(language, 'Audioeinstellungen', 'Audio settings')}>
+    <header><span>{pick(language, 'Audio', 'Audio')}</span><small>{pick(language, 'Musik', 'Music')}</small></header>
+    <div className="music-volume-row">
+      <button
+        type="button"
+        className={musicMuted ? 'is-muted' : ''}
+        aria-label={musicMuted ? pick(language, 'Musik einschalten', 'Unmute music') : pick(language, 'Musik stummschalten', 'Mute music')}
+        aria-pressed={musicMuted}
+        onClick={() => onMusicMuted(!musicMuted)}
+      >
+        <SpeakerIcon muted={musicMuted} />
+      </button>
+      <input
+        type="range"
+        min="0"
+        max="100"
+        step="1"
+        value={displayedVolume}
+        aria-label={pick(language, 'Musiklautstärke', 'Music volume')}
+        onChange={(event) => changeVolume(Number(event.target.value))}
+      />
+      <output>{musicMuted ? pick(language, 'Aus', 'Off') : `${displayedVolume}%`}</output>
+    </div>
+  </section>
+}
+
+const AudioMenuButton = (settings: MusicSettingsProps) => {
+  const language = useLanguage()
+  const [open, setOpen] = useState(false)
+  const rootRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const close = (event: MouseEvent | KeyboardEvent) => {
+      if (event instanceof KeyboardEvent && event.key !== 'Escape') return
+      if (event instanceof MouseEvent && rootRef.current?.contains(event.target as Node)) return
+      setOpen(false)
+    }
+    document.addEventListener('mousedown', close)
+    window.addEventListener('keydown', close)
+    return () => {
+      document.removeEventListener('mousedown', close)
+      window.removeEventListener('keydown', close)
+    }
+  }, [open])
+
+  return <div className="audio-menu" ref={rootRef}>
+    <button
+      className="audio-menu-trigger"
+      type="button"
+      aria-label={pick(language, 'Audioeinstellungen öffnen', 'Open audio settings')}
+      aria-haspopup="dialog"
+      aria-expanded={open}
+      onClick={() => setOpen((value) => !value)}
+    >
+      <SpeakerIcon muted={settings.musicMuted} />
+    </button>
+    {open && <div className="audio-menu-popover" role="dialog" aria-label={pick(language, 'Audioeinstellungen', 'Audio settings')}>
+      <MusicVolumeControl {...settings} />
+    </div>}
+  </div>
+}
+
+interface GameMenuProps extends MusicSettingsProps {
+  onMainMenu: () => void
+  onNewGame: () => void
+  onHelp: () => void
+}
+
+const GameMenu = ({ onMainMenu, onNewGame, onHelp, ...musicSettings }: GameMenuProps) => {
   const language = useLanguage()
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
@@ -664,10 +804,13 @@ const GameMenu = ({ onMainMenu, onNewGame, onHelp }: { onMainMenu: () => void; o
     <button className="game-menu-trigger" type="button" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
       <span aria-hidden="true">☰</span> {pick(language, 'Menü', 'Menu')}
     </button>
-    {open && <div className="game-menu-popover" role="menu">
-      <button type="button" role="menuitem" onClick={() => run(onMainMenu)}>← {pick(language, 'Zurück zum Hauptmenü', 'Back to main menu')}</button>
-      <button type="button" role="menuitem" onClick={() => run(onNewGame)}>↻ {pick(language, 'Neue Partie', 'New game')}</button>
-      <button type="button" role="menuitem" onClick={() => run(onHelp)}>? {pick(language, 'Hilfe', 'Help')}</button>
+    {open && <div className="game-menu-popover">
+      <div className="game-menu-actions" role="menu">
+        <button type="button" role="menuitem" onClick={() => run(onMainMenu)}>← {pick(language, 'Zurück zum Hauptmenü', 'Back to main menu')}</button>
+        <button type="button" role="menuitem" onClick={() => run(onNewGame)}>↻ {pick(language, 'Neue Partie', 'New game')}</button>
+        <button type="button" role="menuitem" onClick={() => run(onHelp)}>? {pick(language, 'Hilfe', 'Help')}</button>
+      </div>
+      <div className="game-menu-audio"><MusicVolumeControl {...musicSettings} /></div>
     </div>}
   </div>
 }
@@ -934,7 +1077,7 @@ const EndGameDialog = ({ state, onNewGame, onMainMenu }: { state: GameState; onN
   )
 }
 
-interface ModeSelectionProps {
+interface ModeSelectionProps extends MusicSettingsProps {
   language: Language
   onLanguage: (language: Language) => void
   rounds: RoundCount
@@ -951,7 +1094,7 @@ interface ModeSelectionProps {
   onResumeRoom: (session: OnlineSession) => void
 }
 
-const ModeSelection = ({ language, onLanguage, rounds, onRounds, busy, error, hasSavedSingleGame, hasSavedLocalGame, savedOnlineSession, onSingleplayer, onLocalPvp, onCreateRoom, onJoinRoom, onResumeRoom }: ModeSelectionProps) => {
+const ModeSelection = ({ language, onLanguage, rounds, onRounds, busy, error, hasSavedSingleGame, hasSavedLocalGame, savedOnlineSession, onSingleplayer, onLocalPvp, onCreateRoom, onJoinRoom, onResumeRoom, musicVolume, musicMuted, onMusicVolume, onMusicMuted }: ModeSelectionProps) => {
   const queryRoom = new URLSearchParams(window.location.search).get('room') ?? ''
   const [joinCode, setJoinCode] = useState(queryRoom.toUpperCase())
   const [launchMode, setLaunchMode] = useState<'singleplayer' | 'local-pvp' | 'online'>()
@@ -966,13 +1109,16 @@ const ModeSelection = ({ language, onLanguage, rounds, onRounds, busy, error, ha
   return (
     <main className="mode-screen">
       <div className="mode-backdrop" aria-hidden="true"><i /><i /><i /></div>
-      <div className="language-switcher" role="group" aria-label={pick(language, 'Sprache wählen', 'Choose language')}>
-        <button type="button" className={language === 'de' ? 'active' : ''} aria-pressed={language === 'de'} aria-label="Deutsch" title="Deutsch" onClick={() => onLanguage('de')}>
-          <span aria-hidden="true">🇩🇪</span><small>DE</small>
-        </button>
-        <button type="button" className={language === 'en' ? 'active' : ''} aria-pressed={language === 'en'} aria-label="English" title="English" onClick={() => onLanguage('en')}>
-          <span aria-hidden="true">🇬🇧</span><small>EN</small>
-        </button>
+      <div className="mode-utility-controls">
+        <div className="language-switcher" role="group" aria-label={pick(language, 'Sprache wählen', 'Choose language')}>
+          <button type="button" className={language === 'de' ? 'active' : ''} aria-pressed={language === 'de'} aria-label="Deutsch" title="Deutsch" onClick={() => onLanguage('de')}>
+            <span aria-hidden="true">🇩🇪</span><small>DE</small>
+          </button>
+          <button type="button" className={language === 'en' ? 'active' : ''} aria-pressed={language === 'en'} aria-label="English" title="English" onClick={() => onLanguage('en')}>
+            <span aria-hidden="true">🇬🇧</span><small>EN</small>
+          </button>
+        </div>
+        <AudioMenuButton musicVolume={musicVolume} musicMuted={musicMuted} onMusicVolume={onMusicVolume} onMusicMuted={onMusicMuted} />
       </div>
       <header className="mode-brand">
         <span className="mode-brand-mark">✦</span>
@@ -1067,7 +1213,14 @@ const ModeSelection = ({ language, onLanguage, rounds, onRounds, busy, error, ha
   )
 }
 
-const OnlineLobby = ({ session, snapshot, connection, onLeave }: { session: OnlineSession; snapshot?: RoomSnapshot; connection: ConnectionStatus; onLeave: () => void }) => {
+interface OnlineLobbyProps extends MusicSettingsProps {
+  session: OnlineSession
+  snapshot?: RoomSnapshot
+  connection: ConnectionStatus
+  onLeave: () => void
+}
+
+const OnlineLobby = ({ session, snapshot, connection, onLeave, ...musicSettings }: OnlineLobbyProps) => {
   const language = useLanguage()
   const [copied, setCopied] = useState(false)
   const inviteUrl = `${window.location.origin}${window.location.pathname}?room=${session.roomCode}`
@@ -1078,6 +1231,7 @@ const OnlineLobby = ({ session, snapshot, connection, onLeave }: { session: Onli
   }
   return (
     <main className="mode-screen lobby-screen">
+      <div className="mode-utility-controls"><AudioMenuButton {...musicSettings} /></div>
       <header className="mode-brand compact"><span className="mode-brand-mark">✦</span><div><span>SEA LINES OF</span><strong>COMMUNICATION</strong></div></header>
       <section className="lobby-card">
         <span className="eyebrow">{pick(language, 'PRIVATER SPIELRAUM', 'PRIVATE GAME ROOM')}</span>
@@ -1113,6 +1267,8 @@ const HandoffOverlay = ({ faction, onReady }: { faction: FactionId; onReady: () 
 function GameApp({ language, onLanguage }: { language: Language; onLanguage: (language: Language) => void }) {
   const [mode, setMode] = useState<'menu' | 'singleplayer' | 'local-pvp' | 'multiplayer'>('menu')
   const [selectedRounds, setSelectedRounds] = useState<RoundCount>(constants.DEFAULT_ROUNDS)
+  const [musicVolume, setMusicVolume] = useState(loadMusicVolume)
+  const [musicMuted, setMusicMuted] = useState(loadMusicMuted)
   const [state, setState] = useState<GameState>(loadState)
   const [onlineSession, setOnlineSession] = useState<OnlineSession>()
   const [roomSnapshot, setRoomSnapshot] = useState<RoomSnapshot>()
@@ -1148,6 +1304,15 @@ function GameApp({ language, onLanguage }: { language: Language; onLanguage: (la
     if (mode === 'singleplayer') localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
     if (mode === 'local-pvp') localStorage.setItem(LOCAL_PVP_STORAGE_KEY, JSON.stringify(state))
   }, [state, mode])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(MUSIC_VOLUME_KEY, String(musicVolume))
+      localStorage.setItem(MUSIC_MUTED_KEY, String(musicMuted))
+    } catch {
+      // Audio settings remain available for this session if storage is unavailable.
+    }
+  }, [musicVolume, musicMuted])
 
   useEffect(() => {
     if (mode !== 'multiplayer' || !onlineSession) return
@@ -1223,9 +1388,20 @@ function GameApp({ language, onLanguage }: { language: Language; onLanguage: (la
 
   const isOnline = mode === 'multiplayer'
   const isLocalPvp = mode === 'local-pvp'
-  const menuMusicActive = mode === 'menu'
+  const isPreGameMenu = mode === 'menu'
     || (isOnline && Boolean(onlineSession) && roomSnapshot?.status !== 'playing' && roomSnapshot?.status !== 'complete')
-  useMenuMusic(menuMusicActive)
+  const musicTrack = isPreGameMenu || state.escalation <= 3
+    ? MUSIC_TRACKS.title
+    : state.escalation === constants.MAX_ESCALATION
+      ? MUSIC_TRACKS.maximum
+      : MUSIC_TRACKS.high
+  useGameMusic(musicTrack, musicMuted ? 0 : musicVolume)
+  const musicSettings: MusicSettingsProps = {
+    musicVolume,
+    musicMuted,
+    onMusicVolume: setMusicVolume,
+    onMusicMuted: setMusicMuted,
+  }
   const viewerFaction: FactionId = isOnline && onlineSession ? onlineSession.faction : isLocalPvp ? state.activeFaction : 'blue'
   const visibleState = useMemo(
     () => isOnline ? state : createFactionView(state, viewerFaction),
@@ -1481,12 +1657,13 @@ function GameApp({ language, onLanguage }: { language: Language; onLanguage: (la
         onCreateRoom={createRoom}
         onJoinRoom={joinRoom}
         onResumeRoom={(session) => enterOnlineSession(session)}
+        {...musicSettings}
       />
     )
   }
 
   if (isOnline && onlineSession && roomSnapshot?.status !== 'playing' && roomSnapshot?.status !== 'complete') {
-    return <OnlineLobby session={onlineSession} snapshot={roomSnapshot} connection={connection} onLeave={leaveToMenu} />
+    return <OnlineLobby session={onlineSession} snapshot={roomSnapshot} connection={connection} onLeave={leaveToMenu} {...musicSettings} />
   }
 
   const escalationBand = getEscalationBand(state.escalation)
@@ -1508,7 +1685,7 @@ function GameApp({ language, onLanguage }: { language: Language; onLanguage: (la
           </div>
           <strong>{state.escalation}<small>/{constants.MAX_ESCALATION}</small></strong>
         </div>
-        <GameMenu onMainMenu={leaveToMenu} onNewGame={() => setShowNewGame(true)} onHelp={() => setShowHelp(true)} />
+        <GameMenu onMainMenu={leaveToMenu} onNewGame={() => setShowNewGame(true)} onHelp={() => setShowHelp(true)} {...musicSettings} />
       </header>
 
       <main className="game-grid">
