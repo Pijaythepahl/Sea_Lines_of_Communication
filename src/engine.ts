@@ -6,7 +6,9 @@ import type {
   CovertOperation,
   FactionId,
   GameState,
+  GovernmentType,
   LeadershipRating,
+  MatchupId,
   RegionId,
   ResourceLevels,
   RoundCount,
@@ -19,10 +21,18 @@ import type {
 
 const DEFAULT_ROUNDS: RoundCount = 6
 const ROUND_OPTIONS: RoundCount[] = [6, 12, 18]
+const DEFAULT_MATCHUP: MatchupId = 'democracy-democracy'
+const MATCHUP_OPTIONS: MatchupId[] = ['democracy-democracy', 'democracy-autocracy', 'autocracy-autocracy']
 const ACTION_POINTS = 3
 const HAND_LIMIT = 7
 const MAX_ESCALATION = 8
 const MAX_DETOUR_CAPACITY = 5
+
+const MATCHUP_GOVERNMENTS: Record<MatchupId, Record<FactionId, GovernmentType>> = {
+  'democracy-democracy': { blue: 'democracy', red: 'democracy' },
+  'democracy-autocracy': { blue: 'democracy', red: 'autocracy' },
+  'autocracy-autocracy': { blue: 'autocracy', red: 'autocracy' },
+}
 
 export const COVERT_CARD_IDS: CardId[] = ['shadowing_operation', 'hybrid_pressure']
 
@@ -70,11 +80,11 @@ const drawCards = (state: GameState, faction: FactionId, count = 1): void => {
 
 const addLog = (state: GameState, message: string, faction?: FactionId, code?: string, params?: Record<string, string | number | boolean>): void => {
   state.log.unshift({ id: `${Date.now()}-${Math.random()}`, round: state.round, faction, message, code, params })
-  state.log = state.log.slice(0, 16)
 }
 
-export const createInitialState = (maxRounds: RoundCount = DEFAULT_ROUNDS): GameState => {
+export const createInitialState = (maxRounds: RoundCount = DEFAULT_ROUNDS, matchup: MatchupId = DEFAULT_MATCHUP): GameState => {
   if (!ROUND_OPTIONS.includes(maxRounds)) throw new Error('Ungültige Rundenzahl.')
+  if (!MATCHUP_OPTIONS.includes(matchup)) throw new Error('Ungültige Staatsform-Paarung.')
   const regions = Object.fromEntries(
     REGION_ORDER.map((id) => [id, { id, resources: { blue: EMPTY_RESOURCES(), red: EMPTY_RESOURCES() } }]),
   ) as GameState['regions']
@@ -89,8 +99,10 @@ export const createInitialState = (maxRounds: RoundCount = DEFAULT_ROUNDS): Game
   const blueDeck = createDeck('blue', maxRounds)
   const redDeck = createDeck('red', maxRounds)
   const state: GameState = {
-    version: 6,
+    version: 7,
     maxRounds,
+    matchup,
+    governments: { ...MATCHUP_GOVERNMENTS[matchup] },
     round: 1,
     phase: 'action',
     activeFaction: 'blue',
@@ -112,8 +124,8 @@ export const createInitialState = (maxRounds: RoundCount = DEFAULT_ROUNDS): Game
     endedActionPoints: { blue: 0, red: 0 },
     lastEvaluationEscalation: 0,
     lastYield: {
-      blue: { routeId: null, yield: 0, blocked: false, contestedRegions: 0, escalationPenalty: 0, responsibilityPenalty: 0, restraintBonus: 0, controlLossPenalty: 0 },
-      red: { routeId: null, yield: 0, blocked: false, contestedRegions: 0, escalationPenalty: 0, responsibilityPenalty: 0, restraintBonus: 0, controlLossPenalty: 0 },
+      blue: { routeId: null, yield: 0, blocked: false, contestedRegions: 0, escalationPenalty: 0, responsibilityPenalty: 0, governmentBonus: 0, restraintBonus: 0, controlLossPenalty: 0 },
+      red: { routeId: null, yield: 0, blocked: false, contestedRegions: 0, escalationPenalty: 0, responsibilityPenalty: 0, governmentBonus: 0, restraintBonus: 0, controlLossPenalty: 0 },
     },
     suspensions: [],
     protections: [],
@@ -166,17 +178,21 @@ export const calculateRouteYield = (state: GameState, routeId: RouteId): YieldRe
   const opponent = otherFaction(faction)
   const escalationPenalty = getEscalationBand(state.escalation).penalty
   const responsibilityPenalty = state.roundEscalation[faction]
+  const government = state.governments[faction]
+  const governmentBonus = government === 'democracy'
+    ? (state.escalation <= 2 ? 1 : 0)
+    : (state.escalation >= 3 && state.escalation <= 5 ? 1 : 0)
   const firstRegion = route.regions[0]
   const marketRegion = route.regions.at(-1)!
   if (getEffectiveResources(state, firstRegion, faction).access === 0 || getEffectiveResources(state, marketRegion, faction).access === 0) {
-    return { routeId, yield: 0, blocked: true, contestedRegions: 0, escalationPenalty, responsibilityPenalty, restraintBonus: 0, controlLossPenalty: 0, reason: 'Kein durchgehender Marktzugang' }
+    return { routeId, yield: 0, blocked: true, contestedRegions: 0, escalationPenalty, responsibilityPenalty, governmentBonus: 0, restraintBonus: 0, controlLossPenalty: 0, reason: 'Kein durchgehender Marktzugang' }
   }
   if (route.kind === 'main' && evaluateChokepoint(state) === opponent) {
-    return { routeId, yield: 0, blocked: true, contestedRegions: 0, escalationPenalty, responsibilityPenalty, restraintBonus: 0, controlLossPenalty: 0, reason: 'Meridianstraße gegnerisch kontrolliert' }
+    return { routeId, yield: 0, blocked: true, contestedRegions: 0, escalationPenalty, responsibilityPenalty, governmentBonus: 0, restraintBonus: 0, controlLossPenalty: 0, reason: 'Meridianstraße gegnerisch kontrolliert' }
   }
   const denied = route.regions.find((regionId) => getUsability(state, regionId, faction) === 'denied')
   if (denied) {
-    return { routeId, yield: 0, blocked: true, contestedRegions: 0, escalationPenalty, responsibilityPenalty, restraintBonus: 0, controlLossPenalty: 0, reason: `${REGIONS[denied].shortName} ist verwehrt` }
+    return { routeId, yield: 0, blocked: true, contestedRegions: 0, escalationPenalty, responsibilityPenalty, governmentBonus: 0, restraintBonus: 0, controlLossPenalty: 0, reason: `${REGIONS[denied].shortName} ist verwehrt` }
   }
   const contestedRegions = route.regions.filter((regionId) => getUsability(state, regionId, faction) === 'contested').length
   const protection = state.protections
@@ -185,11 +201,12 @@ export const calculateRouteYield = (state: GameState, routeId: RouteId): YieldRe
   const effectivePenalty = Math.max(0, contestedRegions - protection)
   return {
     routeId,
-    yield: Math.max(0, state.routeCapacity[routeId] - effectivePenalty - escalationPenalty - responsibilityPenalty),
+    yield: Math.max(0, state.routeCapacity[routeId] - effectivePenalty - escalationPenalty - responsibilityPenalty) + governmentBonus,
     blocked: false,
     contestedRegions,
     escalationPenalty,
     responsibilityPenalty,
+    governmentBonus,
     restraintBonus: 0,
     controlLossPenalty: 0,
   }
@@ -226,6 +243,29 @@ export const calculateRoundYield = (
 const hasRoom = (state: GameState, regionId: RegionId, faction: FactionId, resource: keyof ResourceLevels): boolean =>
   state.regions[regionId].resources[faction][resource] < RESOURCE_LABELS[resource].max
 
+const HOME_REGIONS: Record<FactionId, RegionId> = { blue: 'western_sea', red: 'eastern_sea' }
+
+export const hasSupplyConnection = (state: GameState, regionId: RegionId, faction: FactionId): boolean => {
+  if (regionId === HOME_REGIONS[faction]) return true
+  const resources = getEffectiveResources(state, regionId, faction)
+  if (resources.access < 1 || resources.logistics < 1) return false
+  return (Object.keys(ROUTES) as RouteId[])
+    .filter((routeId) => ROUTES[routeId].faction === faction && ROUTES[routeId].regions.includes(regionId))
+    .some((routeId) => {
+      const route = ROUTES[routeId]
+      const targetIndex = route.regions.indexOf(regionId)
+      return route.regions.slice(0, targetIndex + 1).every((id) => getUsability(state, id, faction) !== 'denied')
+    })
+}
+
+const patrolDestinations = (state: GameState, source: RegionId, faction: FactionId): RegionId[] => REGION_ORDER.filter((target) => {
+  if (target === source || !hasRoom(state, target, faction, 'presence')) return false
+  if (REGIONS[source].neighbors.includes(target)) return true
+  return REGIONS[source].neighbors.some((intermediate) =>
+    getUsability(state, intermediate, faction) !== 'denied' && REGIONS[intermediate].neighbors.includes(target),
+  )
+})
+
 export const getValidRegionTargets = (state: GameState, cardId: CardId, selected: RegionId[] = []): RegionId[] => {
   const faction = state.activeFaction
   const opponent = otherFaction(faction)
@@ -233,11 +273,11 @@ export const getValidRegionTargets = (state: GameState, cardId: CardId, selected
   switch (cardId) {
     case 'patrol_group':
       if (selected.length === 0) {
-        return all.filter((id) => state.regions[id].resources[faction].presence > 0 && REGIONS[id].neighbors.some((neighbor) => hasRoom(state, neighbor, faction, 'presence')))
+        return all.filter((id) => state.regions[id].resources[faction].presence > 0 && patrolDestinations(state, id, faction).length > 0)
       }
-      return REGIONS[selected[0]].neighbors.filter((id) => hasRoom(state, id, faction, 'presence'))
+      return patrolDestinations(state, selected[0], faction)
     case 'forward_deployment':
-      return all.filter((id) => getEffectiveResources(state, id, faction).logistics > 0 && hasRoom(state, id, faction, 'presence'))
+      return all.filter((id) => hasRoom(state, id, faction, 'presence') && hasSupplyConnection(state, id, faction))
     case 'isr_recon':
       return all.filter((id) => hasRoom(state, id, faction, 'awareness'))
     case 'persistent_sensors':
@@ -497,9 +537,14 @@ const responsibilityScore = (value: number, maxRounds: RoundCount): number => {
 
 const RATING_LABELS = ['Strategisch gescheitert', 'Riskante Bilanz', 'Kostspielige Führung', 'Kontrollierte Führung', 'Vorbildliche Staatskunst'] as const
 
+const resultScore = (state: GameState, faction: FactionId): number => {
+  const difference = state.economicScore[faction] - state.economicScore[otherFaction(faction)]
+  const roundedMargin = Math.round((Math.abs(difference) / state.maxRounds) * 10) / 10
+  return Math.max(0, Math.min(4, 2 + Math.sign(difference) * roundedMargin))
+}
+
 export const calculateLeadershipRating = (state: GameState, faction: FactionId): LeadershipRating => {
-  const winner = state.winner ?? determineWinner(state)
-  const result = winner.faction === faction ? 4 : winner.faction === null ? 2 : 0
+  const result = resultScore(state, faction)
   const averageEscalation = state.escalationHistory.length > 0
     ? state.escalationHistory.reduce((sum, value) => sum + value, 0) / state.escalationHistory.length
     : state.lastEvaluationEscalation
@@ -596,7 +641,10 @@ export const createFactionView = (state: GameState, faction: FactionId): GameSta
 
 export const migrateGameState = (stored: unknown): GameState => {
   const next = structuredClone(stored) as any
-  if (next.version === 6) return next as GameState
+  const sourceVersion = Number(next.version ?? 0)
+  if (next.version === 7) return next as GameState
+  next.matchup = MATCHUP_OPTIONS.includes(next.matchup) ? next.matchup : DEFAULT_MATCHUP
+  next.governments = next.governments ?? { ...MATCHUP_GOVERNMENTS[next.matchup as MatchupId] }
   next.maxRounds = ROUND_OPTIONS.includes(next.maxRounds) ? next.maxRounds : DEFAULT_ROUNDS
   next.escalation ??= 0
   next.roundEscalation ??= { blue: 0, red: 0 }
@@ -608,7 +656,11 @@ export const migrateGameState = (stored: unknown): GameState => {
   next.lastEvaluationEscalation ??= next.escalation
   const completedRounds = next.phase === 'complete' ? next.maxRounds : Math.max(0, next.round - 1)
   next.escalationHistory ??= Array.from({ length: completedRounds }, () => next.lastEvaluationEscalation)
-  next.leadershipHistoryComplete = completedRounds === 0 && next.totalEscalation.blue === 0 && next.totalEscalation.red === 0
+  if (sourceVersion < 6) {
+    next.leadershipHistoryComplete = completedRounds === 0 && next.totalEscalation.blue === 0 && next.totalEscalation.red === 0
+  } else {
+    next.leadershipHistoryComplete ??= completedRounds === 0 && next.totalEscalation.blue === 0 && next.totalEscalation.red === 0
+  }
   next.covertOperations ??= []
   for (const faction of ['blue', 'red'] as const) {
     const zones: CardInstance[] = [
@@ -636,16 +688,17 @@ export const migrateGameState = (stored: unknown): GameState => {
       ...next.lastYield[faction],
       escalationPenalty: next.lastYield[faction].escalationPenalty ?? 0,
       responsibilityPenalty: next.lastYield[faction].responsibilityPenalty ?? 0,
+      governmentBonus: next.lastYield[faction].governmentBonus ?? 0,
       restraintBonus: next.lastYield[faction].restraintBonus ?? 0,
       controlLossPenalty: next.lastYield[faction].controlLossPenalty ?? 0,
     }
   }
   delete next.deescalatedThisRound
   delete next.detourUpgradedRound
-  next.version = 6
+  next.version = 7
   return next as GameState
 }
 
 export const getCardDefinition = (instance: CardInstance) => CARDS[instance.cardId]
 
-export const constants = { DEFAULT_ROUNDS, ROUND_OPTIONS, ACTION_POINTS, HAND_LIMIT, MAX_ESCALATION, MAX_DETOUR_CAPACITY }
+export const constants = { DEFAULT_ROUNDS, ROUND_OPTIONS, DEFAULT_MATCHUP, MATCHUP_OPTIONS, ACTION_POINTS, HAND_LIMIT, MAX_ESCALATION, MAX_DETOUR_CAPACITY }

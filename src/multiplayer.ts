@@ -1,4 +1,4 @@
-import type { FactionId, GameCommand, GameState, RoundCount } from './types'
+import type { FactionId, GameCommand, GameState, MatchupId, RoundCount } from './types'
 
 export type RoomStatus = 'waiting' | 'playing' | 'complete'
 export type ConnectionStatus = 'connecting' | 'connected' | 'reconnecting' | 'offline'
@@ -12,6 +12,7 @@ export interface OnlineSession {
 export interface RematchProposal {
   requestedBy: FactionId
   maxRounds: RoundCount
+  matchup: MatchupId
 }
 
 export interface RoomSnapshot {
@@ -27,7 +28,7 @@ export interface RoomSnapshot {
 
 export type RoomCommand =
   | (GameCommand & { revision: number })
-  | { type: 'request-rematch'; maxRounds: RoundCount; revision: number }
+  | { type: 'request-rematch'; maxRounds: RoundCount; matchup: MatchupId; revision: number }
   | { type: 'accept-rematch'; revision: number }
   | { type: 'decline-rematch'; revision: number }
   | { type: 'cancel-rematch'; revision: number }
@@ -45,11 +46,11 @@ const parseResponse = async (response: Response): Promise<SessionResponse> => {
   return body
 }
 
-export const createOnlineRoom = async (maxRounds: RoundCount): Promise<SessionResponse> =>
+export const createOnlineRoom = async (maxRounds: RoundCount, matchup: MatchupId): Promise<SessionResponse> =>
   parseResponse(await fetch('/api/rooms', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ maxRounds }),
+    body: JSON.stringify({ maxRounds, matchup }),
   }))
 
 export const joinOnlineRoom = async (roomCode: string): Promise<SessionResponse> =>

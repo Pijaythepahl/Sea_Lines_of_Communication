@@ -1,8 +1,18 @@
 # Sea Lines of Communication
 
-Rundenbasiertes maritimes Strategiespiel für Desktop und Laptop. MVP 6 bietet eine vollständig deutsch- und englischsprachige Oberfläche, variable Einsatzdauer sowie Einzelspieler, lokales Pass-and-play und private Online-Partien.
+Rundenbasiertes maritimes Strategiespiel für Desktop und Laptop. Version 1.0 bietet eine vollständig deutsch- und englischsprachige Oberfläche, variable Einsatzdauer sowie Einzelspieler, lokales Pass-and-play und private Online-Partien.
 
-## MVP 6
+## Version 1.0
+
+- Neue Partien verwenden Demokratie–Demokratie, Demokratie–Autokratie oder Autokratie–Autokratie.
+- Demokratien erhalten bei Eskalation 0–2 einen Wirtschaftspunkt, Autokratien bei Eskalation 3–5; ab Eskalation 6 entfällt der Staatsformbonus.
+- Vorausstationierung verstärkt das Heimatmeer oder einen über Zugang, Logistik und eine eigene SLOC versorgten Vorposten.
+- Patrouillenverbände verlegen Präsenz für 1 AP ein oder zwei Regionen weit, dürfen aber keine verwehrten Zwischenräume überspringen.
+- Die Führungswertung berücksichtigt den Punkteabstand pro gespielter Runde statt nur Sieg oder Niederlage.
+- Das vollständige Operationslog ist scrollbar; Online-Zugwechsel werden durch einen bestätigungspflichtigen Hinweis hervorgehoben.
+- Animierte SLOCs visualisieren den aktuellen Verkehrsfluss und kommen bei blockierten Routen oder Kontrollverlust zum Stillstand.
+
+## Weitere Funktionen
 
 - Im Hauptmenü kann jederzeit zwischen Deutsch und Englisch gewechselt werden. Die Auswahl wird lokal gespeichert und gilt im Online-PvP nur für die eigene Ansicht.
 - Neue Partien können über 6, 12 oder 18 Runden gespielt werden; 6 Runden bleiben Standard und Minimum.
@@ -36,7 +46,7 @@ Rundenbasiertes maritimes Strategiespiel für Desktop und Laptop. MVP 6 bietet e
 - WebSockets synchronisieren Karte, Ausbau, Zugwechsel und Verbindungsstatus in Echtzeit.
 - Gegnerische Hände, Decks, Abwurfdetails und geheime Aufträge werden nicht übertragen.
 
-## Regeln bis MVP 6
+## Regeln in Version 1.0
 
 - Ausweich-SLOCs starten bei Kapazität 3 und können mit den beiden Karten „Zusätzliche Tonnage“ dauerhaft bis 5 ausgebaut werden.
 - Eine friedliche Seite mit mindestens 1 Rest-AP erhält bei der Wertung +1 Ruhebonus.
@@ -86,4 +96,4 @@ Bei einer Veröffentlichung über die Cloudflare-GitHub-Integration bleiben die 
 - Deploy-Befehl: `pnpm exec wrangler deploy`
 - Produktionsdateien: `dist/`
 
-Nicht enthalten sind Benutzerkonten, öffentliches Matchmaking, Ranglisten, Chat, Fraktionsasymmetrie, Audio und vollwertige Smartphone-Unterstützung.
+Nicht enthalten sind Benutzerkonten, öffentliches Matchmaking, Ranglisten, Chat, ein realistischer Kartenhintergrund und vollwertige Smartphone-Unterstützung.

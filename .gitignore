@@ -4,6 +4,7 @@ dist/
 .wrangler/
 .wrangler-home/
 .agents/
+source-assets/
 *.tsbuildinfo
 *.local
 *.log

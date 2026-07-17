@@ -57,11 +57,19 @@ const evaluateState = (state: GameState, faction: GameState['activeFaction']): n
   )
   const scoreBalance = preview.economicScore[faction] - preview.economicScore[opponent]
   const responsibility = preview.roundEscalation[faction]
+  const government = preview.governments[faction]
+  const governmentFit = government === 'democracy'
+    ? (preview.escalation <= 2 ? 2 : -(preview.escalation - 2) * 1.5)
+    : preview.escalation >= 3 && preview.escalation <= 5
+      ? 2
+      : preview.escalation < 3
+        ? preview.escalation - 3
+        : -(preview.escalation - 5) * 1.5
   const mainId = faction === 'blue' ? 'blue_main' : 'red_main'
   const detourId = faction === 'blue' ? 'blue_detour' : 'red_detour'
   const mainYield = getBestYield(preview, faction).routeId === mainId ? getBestYield(preview, faction).yield : 0
   const insurance = preview.routeCapacity[detourId] * Math.max(1, 6 - mainYield)
-  return ownYield * 12 - opposingYield * 9 + strategicBalance * 1.5 + scoreBalance * 2 - responsibility * 4 + insurance
+  return ownYield * 12 - opposingYield * 9 + strategicBalance * 1.5 + scoreBalance * 2 - responsibility * 4 + insurance + governmentFit
 }
 
 export const chooseAiAction = (state: GameState): GameCommand | null => {
@@ -76,7 +84,8 @@ export const chooseAiAction = (state: GameState): GameCommand | null => {
       try {
         const next = playCard(visibleState, play)
         const definition = CARDS[card.cardId]
-        const escalationCost = play.covert ? 0 : definition.escalation * 2
+        const prefersMidEscalation = visibleState.governments[faction] === 'autocracy' && visibleState.escalation < 3
+        const escalationCost = play.covert ? 0 : definition.escalation * (prefersMidEscalation ? 0.75 : 2)
         const covertStrategicValue = play.covert ? (card.cardId === 'hybrid_pressure' ? 6 : 3) : 0
         const value = evaluateState(next, faction) - baseline - escalationCost + covertStrategicValue + (definition.cost + (play.covert ? 1 : 0)) * 0.15
         if (!best || value > best.value) best = { command: { type: 'play-card', play }, value }

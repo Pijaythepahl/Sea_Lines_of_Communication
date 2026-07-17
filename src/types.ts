@@ -1,5 +1,7 @@
 export type FactionId = 'blue' | 'red'
 export type RoundCount = 6 | 12 | 18
+export type GovernmentType = 'democracy' | 'autocracy'
+export type MatchupId = 'democracy-democracy' | 'democracy-autocracy' | 'autocracy-autocracy'
 
 export type RegionId =
   | 'western_sea'
@@ -123,6 +125,7 @@ export interface YieldResult {
   contestedRegions: number
   escalationPenalty: number
   responsibilityPenalty: number
+  governmentBonus: number
   restraintBonus: number
   controlLossPenalty: number
   reason?: string
@@ -174,8 +177,10 @@ export interface LeadershipRating {
 }
 
 export interface GameState {
-  version: 6
+  version: 7
   maxRounds: RoundCount
+  matchup: MatchupId
+  governments: Record<FactionId, GovernmentType>
   round: number
   phase: GamePhase
   activeFaction: FactionId

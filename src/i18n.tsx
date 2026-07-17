@@ -1,6 +1,6 @@
 import { createContext, useContext, type ReactNode } from 'react'
 import { CARDS, FACTIONS, REGIONS, RESOURCE_LABELS, ROUTES, USABILITY_LABELS } from './data'
-import type { CardDefinition, CardId, FactionId, LogEntry, RegionDefinition, RegionId, ResourceKey, RouteDefinition, RouteId, Usability, WinnerResult, YieldResult } from './types'
+import type { CardDefinition, CardId, FactionId, GovernmentType, LogEntry, MatchupId, RegionDefinition, RegionId, ResourceKey, RouteDefinition, RouteId, Usability, WinnerResult, YieldResult } from './types'
 
 export type Language = 'de' | 'en'
 
@@ -52,14 +52,14 @@ const EN_ROUTES: Record<RouteId, string> = {
 
 const EN_CARDS: Record<CardId, Pick<CardDefinition, 'title' | 'domain' | 'description' | 'instruction' | 'playHint' | 'escalationReason'>> = {
   patrol_group: {
-    title: 'Patrol Group', domain: 'Presence', description: 'Move 1 Presence to an adjacent region.',
-    instruction: 'Select the origin first, then the destination.',
-    playHint: 'Playable when you have at least 1 Presence in a region and an adjacent region can receive Presence. Select the origin first, then its neighbor.',
+    title: 'Patrol Group', domain: 'Presence', description: 'Move 1 Presence one or two regions.',
+    instruction: 'Select the origin first, then a destination up to two regions away.',
+    playHint: 'Moves 1 Presence for 1 AP. A two-region move requires a non-denied intermediate region, which is determined automatically.',
   },
   forward_deployment: {
-    title: 'Forward Deployment', domain: 'Presence', description: '+1 Presence and up to +1 Awareness in a logistically connected region.',
-    instruction: 'Select a region with active friendly Logistics.',
-    playHint: 'Only playable in a region with at least 1 active friendly Logistics and fewer than 3 friendly Presence. Presence improves Awareness up to 2.',
+    title: 'Forward Deployment', domain: 'Presence', description: '+1 Presence and up to +1 Awareness at home or at a supplied outpost.',
+    instruction: 'Select the home sea or an outpost supplied through a friendly SLOC.',
+    playHint: 'Outposts require active Access, active Logistics, and a non-denied connection to the home sea. Presence improves Awareness up to 2.',
     escalationReason: 'A visible reinforcement of forward forces',
   },
   isr_recon: {
@@ -119,6 +119,22 @@ export const usabilityText = (usability: Usability, language: Language) => langu
 export const regionText = (region: RegionId, language: Language): RegionDefinition => language === 'de' ? REGIONS[region] : { ...REGIONS[region], ...EN_REGIONS[region] }
 export const routeText = (route: RouteId, language: Language): RouteDefinition => language === 'de' ? ROUTES[route] : { ...ROUTES[route], name: EN_ROUTES[route] }
 export const cardText = (card: CardId, language: Language): CardDefinition => language === 'de' ? CARDS[card] : { ...CARDS[card], ...EN_CARDS[card] }
+
+export const governmentText = (government: GovernmentType, language: Language) => government === 'democracy'
+  ? {
+      name: pick(language, 'Demokratie', 'Democracy'),
+      benefit: pick(language, '+1 Ertrag bei Eskalation 0–2', '+1 Yield at Escalation 0–2'),
+    }
+  : {
+      name: pick(language, 'Autokratie', 'Autocracy'),
+      benefit: pick(language, '+1 Ertrag bei Eskalation 3–5', '+1 Yield at Escalation 3–5'),
+    }
+
+export const matchupText = (matchup: MatchupId, language: Language) => {
+  if (matchup === 'democracy-autocracy') return pick(language, 'Demokratie gegen Autokratie', 'Democracy vs Autocracy')
+  if (matchup === 'autocracy-autocracy') return pick(language, 'Autokratie gegen Autokratie', 'Autocracy vs Autocracy')
+  return pick(language, 'Demokratie gegen Demokratie', 'Democracy vs Democracy')
+}
 
 export const escalationLabel = (level: number, language: Language) => {
   if (level <= 1) return pick(language, 'Stabilität', 'Stability')
@@ -193,6 +209,7 @@ const ERROR_TRANSLATIONS: Record<string, string> = {
   'Der Spielstand wurde inzwischen aktualisiert. Bitte erneut versuchen.': 'The game state has changed. Please try again.',
   'Die Ausweich-SLOC hat bereits ihre maximale Kapazität erreicht.': 'The Detour SLOC has already reached maximum capacity.',
   'Ungültige Rundenzahl.': 'Invalid round count.',
+  'Ungültige Staatsform-Paarung.': 'Invalid government matchup.',
   'Der Spielraum konnte nicht erreicht werden.': 'The game room could not be reached.',
   'Dieser Spielraum existiert nicht.': 'This game room does not exist.',
   'In diesem Spielraum sind bereits zwei Personen.': 'This game room already has two players.',

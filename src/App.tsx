@@ -32,7 +32,9 @@ import {
   formatLogEntry,
   formatYieldReason,
   formatWinnerReason,
+  governmentText,
   leadershipLabel,
+  matchupText,
   pick,
   regionText,
   resourceText,
@@ -56,6 +58,7 @@ import type {
   CardPlay,
   FactionId,
   GameState,
+  MatchupId,
   RegionId,
   ResourceKey,
   RouteId,
@@ -63,8 +66,10 @@ import type {
   SuspendableResource,
 } from './types'
 
-const STORAGE_KEY = 'sloc-game-v6'
-const LOCAL_PVP_STORAGE_KEY = 'sloc-local-pvp-v6'
+const STORAGE_KEY = 'sloc-game-v7'
+const LOCAL_PVP_STORAGE_KEY = 'sloc-local-pvp-v7'
+const V6_STORAGE_KEY = 'sloc-game-v6'
+const V6_LOCAL_PVP_STORAGE_KEY = 'sloc-local-pvp-v6'
 const V5_STORAGE_KEY = 'sloc-game-v5'
 const V5_LOCAL_PVP_STORAGE_KEY = 'sloc-local-pvp-v5'
 const V4_STORAGE_KEY = 'sloc-game-v4'
@@ -74,13 +79,150 @@ const V2_STORAGE_KEY = 'sloc-game-v2'
 const LEGACY_STORAGE_KEY = 'sloc-mvp1-game-v1'
 const ONLINE_SESSION_KEY = 'sloc-online-session-v1'
 const LANGUAGE_KEY = 'sloc-language-v1'
+const MUSIC_VOLUME_KEY = 'sloc-music-volume-v1'
+const MUSIC_MUTED_KEY = 'sloc-music-muted-v1'
+const DEFAULT_MUSIC_VOLUME = 0.32
+const MUSIC_FADE_MS = 650
+const MUSIC_TRACK_STABILITY_MS = 1000
+const MUSIC_TRACKS = {
+  title: '/audio/music/title-theme.ogg',
+  high: '/audio/music/escalation-high.ogg',
+  maximum: '/audio/music/escalation-maximum.ogg',
+} as const
+
+const loadMusicVolume = () => {
+  try {
+    const stored = localStorage.getItem(MUSIC_VOLUME_KEY)
+    if (stored === null) return DEFAULT_MUSIC_VOLUME
+    const value = Number(stored)
+    return Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : DEFAULT_MUSIC_VOLUME
+  } catch {
+    return DEFAULT_MUSIC_VOLUME
+  }
+}
+
+const loadMusicMuted = () => {
+  try {
+    return localStorage.getItem(MUSIC_MUTED_KEY) === 'true'
+  } catch {
+    return false
+  }
+}
+
+const useGameMusic = (track: string, volume: number) => {
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const animationFrameRef = useRef<number | undefined>(undefined)
+  const currentTrackRef = useRef<string>(MUSIC_TRACKS.title)
+  const volumeRef = useRef(volume)
+
+  useEffect(() => {
+    const audio = document.createElement('audio')
+
+    audio.src = MUSIC_TRACKS.title
+    audio.loop = true
+    audio.preload = 'auto'
+    audio.volume = 0
+    audio.muted = volume === 0
+    audio.hidden = true
+    audio.dataset.gameMusic = 'true'
+    audio.setAttribute('aria-hidden', 'true')
+    document.body.append(audio)
+    audioRef.current = audio
+    audio.load()
+
+    return () => {
+      if (animationFrameRef.current !== undefined) cancelAnimationFrame(animationFrameRef.current)
+      audio.pause()
+      audio.removeAttribute('src')
+      audio.remove()
+      audioRef.current = null
+    }
+  }, [])
+
+  useEffect(() => {
+    volumeRef.current = volume
+    const audio = audioRef.current
+    if (!audio) return
+    audio.muted = volume === 0
+    if (!audio.paused) audio.volume = volume
+  }, [volume])
+
+  useEffect(() => {
+    const audio = audioRef.current
+    if (!audio) return
+    let disposed = false
+
+    const cancelFade = () => {
+      if (animationFrameRef.current === undefined) return
+      cancelAnimationFrame(animationFrameRef.current)
+      animationFrameRef.current = undefined
+    }
+
+    const fadeTo = (target: number) => new Promise<void>((resolve) => {
+      cancelFade()
+      const initialVolume = audio.volume
+      const startedAt = performance.now()
+
+      const step = (now: number) => {
+        if (disposed) return
+        const progress = Math.min((now - startedAt) / MUSIC_FADE_MS, 1)
+        audio.volume = initialVolume + (target - initialVolume) * progress
+        if (progress < 1) {
+          animationFrameRef.current = requestAnimationFrame(step)
+          return
+        }
+        animationFrameRef.current = undefined
+        resolve()
+      }
+
+      animationFrameRef.current = requestAnimationFrame(step)
+    })
+
+    const start = async () => {
+      if (disposed) return
+      try {
+        if (currentTrackRef.current !== track) {
+          await fadeTo(0)
+          if (disposed) return
+          audio.pause()
+          audio.src = track
+          audio.currentTime = 0
+          audio.volume = 0
+          currentTrackRef.current = track
+          audio.load()
+        }
+        if (audio.paused) await audio.play()
+        if (disposed) return
+        await fadeTo(volumeRef.current)
+      } catch {
+        // Browser autoplay may be blocked until a React UI event calls the
+        // synchronous start function returned by this hook.
+      }
+    }
+
+    void start()
+
+    return () => {
+      disposed = true
+      cancelFade()
+    }
+  }, [track])
+
+  return () => {
+    const audio = audioRef.current
+    if (!audio) return
+    audio.muted = volumeRef.current === 0
+    audio.volume = volumeRef.current
+    if (audio.paused) void audio.play().catch(() => undefined)
+  }
+}
 
 const loadState = (storageKey = STORAGE_KEY): GameState => {
   try {
     const raw = localStorage.getItem(storageKey)
       ?? (storageKey === STORAGE_KEY
-        ? localStorage.getItem(V5_STORAGE_KEY) ?? localStorage.getItem(V4_STORAGE_KEY) ?? localStorage.getItem(V3_STORAGE_KEY) ?? localStorage.getItem(V2_STORAGE_KEY) ?? localStorage.getItem(LEGACY_STORAGE_KEY)
-        : storageKey === LOCAL_PVP_STORAGE_KEY ? localStorage.getItem(V5_LOCAL_PVP_STORAGE_KEY) ?? localStorage.getItem(V4_LOCAL_PVP_STORAGE_KEY) : null)
+        ? localStorage.getItem(V6_STORAGE_KEY) ?? localStorage.getItem(V5_STORAGE_KEY) ?? localStorage.getItem(V4_STORAGE_KEY) ?? localStorage.getItem(V3_STORAGE_KEY) ?? localStorage.getItem(V2_STORAGE_KEY) ?? localStorage.getItem(LEGACY_STORAGE_KEY)
+        : storageKey === LOCAL_PVP_STORAGE_KEY ? localStorage.getItem(V6_LOCAL_PVP_STORAGE_KEY) ?? localStorage.getItem(V5_LOCAL_PVP_STORAGE_KEY) ?? localStorage.getItem(V4_LOCAL_PVP_STORAGE_KEY) : null)
     if (!raw) return createInitialState()
     const parsed = JSON.parse(raw) as GameState
     if (!parsed.regions?.central_basin || !parsed.hands?.blue) return createInitialState()
@@ -91,6 +233,19 @@ const loadState = (storageKey = STORAGE_KEY): GameState => {
 }
 
 const factionClass = (faction: FactionId) => (faction === 'blue' ? 'is-blue' : 'is-red')
+
+const MatchupSelector = ({ value, onChange }: { value: MatchupId; onChange: (matchup: MatchupId) => void }) => {
+  const language = useLanguage()
+  return <div className="matchup-choice" role="group" aria-label={pick(language, 'Staatsform-Paarung', 'Government matchup')}>
+    {constants.MATCHUP_OPTIONS.map((matchup) => {
+      const [blue, red] = matchup.split('-') as ['democracy' | 'autocracy', 'democracy' | 'autocracy']
+      return <button type="button" key={matchup} className={value === matchup ? 'active' : ''} aria-pressed={value === matchup} onClick={() => onChange(matchup)}>
+        <strong>{matchupText(matchup, language)}</strong>
+        <small>{governmentText(blue, language).benefit}{blue !== red ? ` · ${governmentText(red, language).benefit}` : ''}</small>
+      </button>
+    })}
+  </div>
+}
 
 const RESOURCE_ORDER: ResourceKey[] = ['presence', 'awareness', 'access', 'logistics']
 
@@ -257,10 +412,16 @@ const MapBoard = ({
             const route = routeText(routeId, language)
             const result = calculateRouteYield(state, routeId)
             const valid = validRoutes.includes(routeId)
+            const operationalYield = Math.max(0, result.yield - result.governmentBonus)
+            const flowRatio = state.escalation >= constants.MAX_ESCALATION || result.blocked
+              ? 0
+              : Math.max(0, Math.min(1, operationalYield / state.routeCapacity[routeId]))
+            const flowDuration = 5.2 - flowRatio * 3.4
             return (
-              <g key={routeId} className={`map-route ${factionClass(route.faction)} ${route.kind} ${result.blocked ? 'blocked' : ''} ${valid ? 'valid-route' : ''} ${selectedRoute === routeId ? 'selected-route' : ''}`}>
+              <g key={routeId} className={`map-route ${factionClass(route.faction)} ${route.kind} ${result.blocked ? 'blocked' : ''} ${flowRatio > 0 ? 'flowing' : 'flow-stopped'} ${valid ? 'valid-route' : ''} ${selectedRoute === routeId ? 'selected-route' : ''}`}>
                 <path className="route-hitbox" d={route.svgPath} onClick={() => onRouteClick(routeId)} />
                 <path className="route-line" d={route.svgPath} />
+                <path className="route-flow" d={route.svgPath} pathLength="100" style={{ animationDuration: `${flowDuration}s` }} />
               </g>
             )
           })}
@@ -370,7 +531,7 @@ const Sidebar = ({ state }: { state: GameState }) => {
     <aside className="left-sidebar">
       <section className={`command-card ${factionClass(active)}`}>
         <span className="eyebrow">{pick(language, 'AKTIVE KOALITION', 'ACTIVE COALITION')}</span>
-        <div className="faction-lockup"><span className="faction-seal">{factionText(active, language).symbol}</span><div><h2>{factionText(active, language).name}</h2><p>{state.turnIndex === 0 ? pick(language, 'Erste Initiative', 'First initiative') : pick(language, 'Reaktion', 'Response')} · {pick(language, 'Runde', 'Round')} {state.round}</p></div></div>
+        <div className="faction-lockup"><span className="faction-seal">{factionText(active, language).symbol}</span><div><h2>{factionText(active, language).name}</h2><p>{governmentText(state.governments[active], language).name} · {state.turnIndex === 0 ? pick(language, 'Erste Initiative', 'First initiative') : pick(language, 'Reaktion', 'Response')} · {pick(language, 'Runde', 'Round')} {state.round}</p></div></div>
         <div className="ap-display" aria-label={`${state.actionPoints} ${pick(language, 'Aktionspunkte verbleibend', 'action points remaining')}`}>
           <span>{pick(language, 'AKTIONSPUNKTE', 'ACTION POINTS')}</span>
           <div>{[1, 2, 3].map((value) => <i key={value} className={value <= state.actionPoints ? 'filled' : ''}>{value <= state.actionPoints ? '●' : '○'}</i>)}</div>
@@ -392,7 +553,7 @@ const Sidebar = ({ state }: { state: GameState }) => {
       <section className="panel log-panel">
         <div className="panel-heading"><span>{pick(language, 'Operationslog', 'Operations Log')}</span><small>{pick(language, 'letzte Meldungen', 'latest reports')}</small></div>
         <ol>
-          {state.log.slice(0, 7).map((entry) => (
+          {state.log.map((entry) => (
             <li key={entry.id} className={entry.faction ? factionClass(entry.faction) : ''}>
               <span>R{entry.round}</span><p>{formatLogEntry(entry, language)}</p>
             </li>
@@ -451,7 +612,7 @@ const Scoreboard = ({ state, validRoutes, selectedRoute, onRouteClick }: Scorebo
               <span className="route-line-icon">{route.kind === 'main' ? '━' : '┄'}</span>
               <span>
                 <strong>{language === 'de' ? route.name.replace(/^(Blaue|Rote) /, '') : route.name.replace(/^(Blue|Red) /, '')} · {pick(language, 'Kapazität', 'Capacity')} {state.routeCapacity[routeId]}</strong>
-                <small>{result.blocked ? formatYieldReason(result, language) : `${result.contestedRegions} ${pick(language, 'unter Druck', 'contested')} · Esc −${result.escalationPenalty + result.responsibilityPenalty}`}</small>
+                <small>{result.blocked ? formatYieldReason(result, language) : `${result.contestedRegions} ${pick(language, 'unter Druck', 'contested')} · Esc −${result.escalationPenalty + result.responsibilityPenalty}${result.governmentBonus ? ` · ${governmentText(state.governments[route.faction], language).name} +${result.governmentBonus}` : ''}`}</small>
               </span>
               <b className={result.blocked ? 'blocked' : ''}>{result.blocked ? pick(language, 'ZU', 'CLOSED') : `+${result.yield}`}</b>
             </button>
@@ -482,15 +643,15 @@ const HelpDialog = ({ onClose }: { onClose: () => void }) => {
     >
       <section className="route-rules-dialog help-dialog">
         <header>
-          <div><span className="eyebrow">{pick(language, 'SPIELHILFE · MVP 6', 'GAME HELP · MVP 6')}</span><h2 id="help-title">{pick(language, 'Seewege führen', 'Command the Sea Lines')}</h2></div>
+          <div><span className="eyebrow">{pick(language, 'SPIELHILFE · VERSION 1.0', 'GAME HELP · VERSION 1.0')}</span><h2 id="help-title">{pick(language, 'Seewege führen', 'Command the Sea Lines')}</h2></div>
           <button type="button" onClick={onClose} aria-label={pick(language, 'Regelhilfe schließen', 'Close rules')}>×</button>
         </header>
 
         <div className="help-section-grid">
           <article><h3>{pick(language, 'Spielablauf', 'Turn flow')}</h3><p>{pick(language, 'Jede Koalition erhält 3 AP. Spiele Karten, wähle ihre Ziele auf der Karte und beende anschließend den Zug. Nach beiden Zügen zählt nur die ertragreichste nutzbare SLOC.', 'Each coalition receives 3 AP. Play cards, choose their targets on the map, then end the turn. After both turns, only the highest-yield usable SLOC scores.')}</p></article>
-          <article><h3>{pick(language, 'Karten und Flotten', 'Cards and fleets')}</h3><p>{pick(language, 'Patrouillenverband verlegt 1 Präsenz in einen Nachbarraum. In längeren Partien werden zwei Karten je Zug gezogen; Zusätzliche Tonnage erhöht für 1 AP dauerhaft die eigene Ausweich-SLOC.', 'Patrol Group moves 1 Presence to an adjacent region. Longer games draw two cards per turn; Additional Tonnage permanently upgrades your Detour SLOC for 1 AP.')}</p></article>
+          <article><h3>{pick(language, 'Karten und Flotten', 'Cards and fleets')}</h3><p>{pick(language, 'Patrouillenverband verlegt 1 Präsenz für 1 AP ein oder zwei Felder weit; verwehrte Zwischenräume können nicht übersprungen werden. Vorausstationierung verstärkt das Heimatmeer oder einen versorgten Vorposten.', 'Patrol Group moves 1 Presence one or two regions for 1 AP; denied intermediate regions cannot be crossed. Forward Deployment reinforces the home sea or a supplied outpost.')}</p></article>
           <article><h3>{pick(language, 'Verdeckte Aktionen', 'Covert actions')}</h3><p>{pick(language, 'Beschattung und Hybrider Druck können für +1 AP verdeckt vorbereitet werden. Sie wirken vor der Wertung ohne Eskalationsanstieg, verhindern aber Ruhebonus und automatische Beruhigung.', 'Shadowing and Hybrid Pressure may be prepared covertly for +1 AP. They resolve before scoring without raising Escalation, but prevent Restraint and automatic calming.')}</p></article>
-          <article><h3>{pick(language, 'Eskalation und Führung', 'Escalation and leadership')}</h3><p>{pick(language, 'Hohe Eskalation senkt den Ertrag. Die Endnote bewertet den durchschnittlichen Eskalationsstand sowie eigene Eskalationspunkte abzüglich gespielter Krisenkommunikation.', 'High Escalation reduces Yield. The final rating uses average Escalation plus your own Escalation points minus Crisis Communications played.')}</p></article>
+          <article><h3>{pick(language, 'Staatsformen und Führung', 'Governments and leadership')}</h3><p>{pick(language, 'Demokratien erhalten +1 Ertrag bei Eskalation 0–2, Autokratien bei 3–5. Ab 6 gilt kein Vorteil. Die Endnote berücksichtigt Ergebnisabstand, Wirtschaft, Eskalation und Verantwortung.', 'Democracies gain +1 Yield at Escalation 0–2, Autocracies at 3–5. No government gains a bonus from 6 onward. The final rating uses result margin, Economy, Escalation, and Responsibility.')}</p></article>
         </div>
 
         <div className="projection-explainer">
@@ -530,6 +691,7 @@ const HelpDialog = ({ onClose }: { onClose: () => void }) => {
           <p><strong>{pick(language, 'Freihafen:', 'Freeport:')}</strong> {pick(language, 'militärische Projektionsüberlegenheit kann den neutralen Markt höchstens unter Druck setzen, nie verwehren. Ohne aktiven eigenen Zugang bleibt die SLOC dennoch geschlossen.', 'military Projection superiority can at most contest the neutral market, never deny it. Without active friendly Access, the SLOC is still closed.')}</p>
           <p><strong>{pick(language, 'Engpasskontrolle:', 'Chokepoint control:')}</strong> {pick(language, 'mindestens 2 Punkte Projektionsvorsprung sowie 2 Präsenz und 1 Zugang in der Meridianstraße. Die Ausweich-SLOC bleibt möglich.', 'at least a 2-point Projection lead plus 2 Presence and 1 Access in Meridian Strait. The Detour SLOC remains available.')}</p>
           <p><strong>{pick(language, 'Präsenz und Lagebild:', 'Presence and Awareness:')}</strong> {pick(language, 'Vorausstationierung verbessert zusätzlich das Lagebild bis maximal 2. Bloßes Verlegen vorhandener Präsenz tut dies nicht.', 'Forward Deployment also improves Awareness up to 2. Merely moving existing Presence does not.')}</p>
+          <p><strong>{pick(language, 'Versorgte Vorposten:', 'Supplied outposts:')}</strong> {pick(language, 'benötigen aktiven Zugang, aktive Logistik und einen nicht verwehrten Abschnitt einer eigenen SLOC bis zum Heimatmeer.', 'require active Access, active Logistics, and a non-denied segment of a friendly SLOC back to the home sea.')}</p>
           <p><strong>{pick(language, 'Eskalation:', 'Escalation:')}</strong> {pick(language, 'verändert nicht den Status „frei/zu“, reduziert aber zusätzlich den wirtschaftlichen Ertrag einer weiterhin nutzbaren SLOC.', 'does not change open/closed status, but further reduces the economic Yield of an otherwise usable SLOC.')}</p>
           <p><strong>{pick(language, 'Konvoisicherung:', 'Convoy Escort:')}</strong> {pick(language, 'hebt bei der nächsten Wertung genau einen „unter Druck“-Malus auf.', 'removes exactly one contested penalty during the next evaluation.')}</p>
           <p><strong>{pick(language, 'Ausbau:', 'Upgrade:')}</strong> {pick(language, 'Jede Seite besitzt genau zwei Karten „Zusätzliche Tonnage“. Für 1 AP steigt die eigene Ausweich-SLOC dauerhaft um 1, bis maximal Kapazität 5.', 'Each side has exactly two Additional Tonnage cards. For 1 AP, your Detour SLOC permanently gains 1 capacity, up to 5.')}</p>
@@ -543,7 +705,109 @@ const HelpDialog = ({ onClose }: { onClose: () => void }) => {
   )
 }
 
-const GameMenu = ({ onMainMenu, onNewGame, onHelp }: { onMainMenu: () => void; onNewGame: () => void; onHelp: () => void }) => {
+interface MusicSettingsProps {
+  musicVolume: number
+  musicMuted: boolean
+  onMusicVolume: (volume: number) => void
+  onMusicMuted: (muted: boolean) => void
+  onMusicStart: () => void
+}
+
+const SpeakerIcon = ({ muted }: { muted: boolean }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
+    <path d="M4 9v6h4l5 4V5L8 9H4Z" fill="currentColor" stroke="none" />
+    {muted
+      ? <path d="m17 9 4 6m0-6-4 6" />
+      : <><path d="M16 9.5a4 4 0 0 1 0 5" /><path d="M18.5 7a7.5 7.5 0 0 1 0 10" /></>}
+  </svg>
+)
+
+const MusicVolumeControl = ({ musicVolume, musicMuted, onMusicVolume, onMusicMuted, onMusicStart }: MusicSettingsProps) => {
+  const language = useLanguage()
+  const displayedVolume = musicMuted ? 0 : Math.round(musicVolume * 100)
+  const changeVolume = (value: number) => {
+    onMusicStart()
+    const volume = Math.max(0, Math.min(1, value / 100))
+    onMusicVolume(volume)
+    onMusicMuted(volume === 0)
+  }
+
+  return <section className="music-volume-control" aria-label={pick(language, 'Audioeinstellungen', 'Audio settings')}>
+    <header><span>{pick(language, 'Audio', 'Audio')}</span><small>{pick(language, 'Musik', 'Music')}</small></header>
+    <div className="music-volume-row">
+      <button
+        type="button"
+        className={musicMuted ? 'is-muted' : ''}
+        aria-label={musicMuted ? pick(language, 'Musik einschalten', 'Unmute music') : pick(language, 'Musik stummschalten', 'Mute music')}
+        aria-pressed={musicMuted}
+        onClick={() => {
+          onMusicStart()
+          onMusicMuted(!musicMuted)
+        }}
+      >
+        <SpeakerIcon muted={musicMuted} />
+      </button>
+      <input
+        type="range"
+        min="0"
+        max="100"
+        step="1"
+        value={displayedVolume}
+        aria-label={pick(language, 'Musiklautstärke', 'Music volume')}
+        onChange={(event) => changeVolume(Number(event.target.value))}
+      />
+      <output>{musicMuted ? pick(language, 'Aus', 'Off') : `${displayedVolume}%`}</output>
+    </div>
+  </section>
+}
+
+const AudioMenuButton = (settings: MusicSettingsProps) => {
+  const language = useLanguage()
+  const [open, setOpen] = useState(false)
+  const rootRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const close = (event: MouseEvent | KeyboardEvent) => {
+      if (event instanceof KeyboardEvent && event.key !== 'Escape') return
+      if (event instanceof MouseEvent && rootRef.current?.contains(event.target as Node)) return
+      setOpen(false)
+    }
+    document.addEventListener('mousedown', close)
+    window.addEventListener('keydown', close)
+    return () => {
+      document.removeEventListener('mousedown', close)
+      window.removeEventListener('keydown', close)
+    }
+  }, [open])
+
+  return <div className="audio-menu" ref={rootRef}>
+    <button
+      className="audio-menu-trigger"
+      type="button"
+      aria-label={pick(language, 'Audioeinstellungen öffnen', 'Open audio settings')}
+      aria-haspopup="dialog"
+      aria-expanded={open}
+      onClick={() => {
+        settings.onMusicStart()
+        setOpen((value) => !value)
+      }}
+    >
+      <SpeakerIcon muted={settings.musicMuted} />
+    </button>
+    {open && <div className="audio-menu-popover" role="dialog" aria-label={pick(language, 'Audioeinstellungen', 'Audio settings')}>
+      <MusicVolumeControl {...settings} />
+    </div>}
+  </div>
+}
+
+interface GameMenuProps extends MusicSettingsProps {
+  onMainMenu: () => void
+  onNewGame: () => void
+  onHelp: () => void
+}
+
+const GameMenu = ({ onMainMenu, onNewGame, onHelp, ...musicSettings }: GameMenuProps) => {
   const language = useLanguage()
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
@@ -569,17 +833,21 @@ const GameMenu = ({ onMainMenu, onNewGame, onHelp }: { onMainMenu: () => void; o
     <button className="game-menu-trigger" type="button" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
       <span aria-hidden="true">☰</span> {pick(language, 'Menü', 'Menu')}
     </button>
-    {open && <div className="game-menu-popover" role="menu">
-      <button type="button" role="menuitem" onClick={() => run(onMainMenu)}>← {pick(language, 'Zurück zum Hauptmenü', 'Back to main menu')}</button>
-      <button type="button" role="menuitem" onClick={() => run(onNewGame)}>↻ {pick(language, 'Neue Partie', 'New game')}</button>
-      <button type="button" role="menuitem" onClick={() => run(onHelp)}>? {pick(language, 'Hilfe', 'Help')}</button>
+    {open && <div className="game-menu-popover">
+      <div className="game-menu-actions" role="menu">
+        <button type="button" role="menuitem" onClick={() => run(onMainMenu)}>← {pick(language, 'Zurück zum Hauptmenü', 'Back to main menu')}</button>
+        <button type="button" role="menuitem" onClick={() => run(onNewGame)}>↻ {pick(language, 'Neue Partie', 'New game')}</button>
+        <button type="button" role="menuitem" onClick={() => run(onHelp)}>? {pick(language, 'Hilfe', 'Help')}</button>
+      </div>
+      <div className="game-menu-audio"><MusicVolumeControl {...musicSettings} /></div>
     </div>}
   </div>
 }
 
-const NewGameDialog = ({ initialRounds, online, onClose, onConfirm }: { initialRounds: RoundCount; online: boolean; onClose: () => void; onConfirm: (rounds: RoundCount) => void }) => {
+const NewGameDialog = ({ initialRounds, initialMatchup, online, onClose, onConfirm }: { initialRounds: RoundCount; initialMatchup: MatchupId; online: boolean; onClose: () => void; onConfirm: (rounds: RoundCount, matchup: MatchupId) => void }) => {
   const language = useLanguage()
   const [rounds, setRounds] = useState<RoundCount>(initialRounds)
+  const [matchup, setMatchup] = useState<MatchupId>(initialMatchup)
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose() }
     window.addEventListener('keydown', closeOnEscape)
@@ -588,16 +856,17 @@ const NewGameDialog = ({ initialRounds, online, onClose, onConfirm }: { initialR
   return <div className="modal-backdrop launch-backdrop" role="dialog" aria-modal="true" aria-labelledby="new-game-title" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
     <section className={`round-selection-dialog ${online ? 'is-online' : ''}`}>
       <span className="eyebrow">{online ? pick(language, 'ONLINE-REVANCHE', 'ONLINE REMATCH') : pick(language, 'NEUE PARTIE', 'NEW GAME')}</span>
-      <h2 id="new-game-title">{pick(language, 'Wie viele Runden?', 'How many rounds?')}</h2>
+      <h2 id="new-game-title">{pick(language, 'Runden und Staatsformen', 'Rounds and governments')}</h2>
       <p>{online
         ? pick(language, 'Die andere Koalition muss dem Neustart im bestehenden Raum zustimmen.', 'The other coalition must accept the restart in the existing room.')
         : pick(language, 'Die laufende lokale Partie wird erst nach deiner Bestätigung ersetzt.', 'The current local game is replaced only after you confirm.')}</p>
       <div className="round-choice" role="group" aria-label={pick(language, 'Rundenzahl', 'Round count')}>
         {constants.ROUND_OPTIONS.map((option) => <button key={option} type="button" className={rounds === option ? 'active' : ''} aria-pressed={rounds === option} onClick={() => setRounds(option)}><strong>{option}</strong><small>{pick(language, 'Runden', 'rounds')}</small></button>)}
       </div>
+      <MatchupSelector value={matchup} onChange={setMatchup} />
       <div className="launch-actions">
         <button className="mode-text-button" type="button" onClick={onClose}>{pick(language, 'Abbrechen', 'Cancel')}</button>
-        <button className="mode-primary" type="button" onClick={() => onConfirm(rounds)}>{online ? pick(language, 'Vorschlagen', 'Propose') : pick(language, 'Neu starten', 'Restart')} <span>→</span></button>
+        <button className="mode-primary" type="button" onClick={() => onConfirm(rounds, matchup)}>{online ? pick(language, 'Vorschlagen', 'Propose') : pick(language, 'Neu starten', 'Restart')} <span>→</span></button>
       </div>
     </section>
   </div>
@@ -614,8 +883,8 @@ const RematchDialog = ({ snapshot, faction, onAccept, onDecline, onCancel }: { s
       <span className="eyebrow">{pick(language, 'NEUE PARTIE · GLEICHER RAUM', 'NEW GAME · SAME ROOM')}</span>
       <h2 id="rematch-title">{own ? pick(language, 'Vorschlag gesendet', 'Proposal sent') : pick(language, 'Revanche vorgeschlagen', 'Rematch proposed')}</h2>
       <p>{own
-        ? pick(language, `Die andere Koalition entscheidet über eine neue Partie mit ${proposal.maxRounds} Runden. Der aktuelle Spielstand bleibt bis dahin erhalten.`, `The other coalition is deciding on a ${proposal.maxRounds}-round game. The current state remains intact until then.`)
-        : pick(language, `${factionText(proposal.requestedBy, language).name} schlägt eine neue Partie mit ${proposal.maxRounds} Runden vor. Raumcode und Seiten bleiben gleich.`, `${factionText(proposal.requestedBy, language).name} proposes a new ${proposal.maxRounds}-round game. Room code and sides stay the same.`)}</p>
+        ? pick(language, `Die andere Koalition entscheidet über ${proposal.maxRounds} Runden · ${matchupText(proposal.matchup, language)}. Der aktuelle Spielstand bleibt bis dahin erhalten.`, `The other coalition is deciding on ${proposal.maxRounds} rounds · ${matchupText(proposal.matchup, language)}. The current state remains intact until then.`)
+        : pick(language, `${factionText(proposal.requestedBy, language).name} schlägt ${proposal.maxRounds} Runden · ${matchupText(proposal.matchup, language)} vor. Raumcode und Seiten bleiben gleich.`, `${factionText(proposal.requestedBy, language).name} proposes ${proposal.maxRounds} rounds · ${matchupText(proposal.matchup, language)}. Room code and sides stay the same.`)}</p>
       <div className="dialog-actions">
         {own
           ? <button className="ghost-button" type="button" onClick={onCancel}>{pick(language, 'Vorschlag zurückziehen', 'Withdraw proposal')}</button>
@@ -674,8 +943,8 @@ const CardHand = ({ state, selected, selectedRegions, selectedRoute, hybridResou
       const width = 290
       setTooltip({
         card: instance,
-        left: Math.min(window.innerWidth - width - 12, Math.max(12, rect.left + rect.width / 2 - width / 2)),
-        top: Math.max(12, rect.top - (CARDS[instance.cardId].escalation > 0 ? 232 : 178)),
+        left: window.scrollX + Math.min(window.innerWidth - width - 12, Math.max(12, rect.left + rect.width / 2 - width / 2)),
+        top: window.scrollY + Math.max(12, rect.top - (CARDS[instance.cardId].escalation > 0 ? 232 : 178)),
         insufficientAp: CARDS[instance.cardId].cost > state.actionPoints,
       })
     }, delay)
@@ -798,6 +1067,7 @@ const EndGameDialog = ({ state, onNewGame, onMainMenu }: { state: GameState; onN
   const winner = state.winner.faction
   const ratings = (['blue', 'red'] as const).map((faction) => calculateLeadershipRating(state, faction))
   const decimal = (value: number) => value.toLocaleString(language === 'de' ? 'de-DE' : 'en-GB', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+  const component = (value: number) => Number.isInteger(value) ? String(value) : decimal(value)
   return (
     <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="result-title">
       <div className={`result-dialog ${winner ? factionClass(winner) : ''}`}>
@@ -823,7 +1093,7 @@ const EndGameDialog = ({ state, onNewGame, onMainMenu }: { state: GameState; onN
               <strong aria-label={`${rating.stars} ${pick(language, 'von 5 Sternen', 'of 5 stars')}`}>{'★'.repeat(rating.stars)}{'☆'.repeat(5 - rating.stars)}</strong>
               <b>{leadershipLabel(rating.stars, language)}</b>
               <div className="rating-breakdown">
-                <p><b>{pick(language, 'Ergebnis', 'Result')} {rating.components.result}/4</b><small>{rating.components.result === 4 ? pick(language, 'Wirtschaftlicher Gesamtsieg.', 'Overall economic victory.') : rating.components.result === 2 ? pick(language, 'Strategisches Gleichgewicht.', 'Strategic balance.') : pick(language, 'Die Gegenseite erzielte den Gesamtsieg.', 'The opposing side achieved overall victory.')}</small></p>
+                <p><b>{pick(language, 'Ergebnis', 'Result')} {component(rating.components.result)}/4</b><small>{pick(language, `Punkteabstand über ${state.maxRounds} Runden berücksichtigt.`, `Score margin across ${state.maxRounds} rounds included.`)}</small></p>
                 <p><b>{pick(language, 'Wirtschaft', 'Economy')} {rating.components.economy}/2</b><small>{pick(language, `Ø ${decimal(rating.metrics.averageYield)} Ertrag je Runde.`, `Average ${decimal(rating.metrics.averageYield)} Yield per round.`)}</small></p>
                 <p><b>{pick(language, 'Eskalation', 'Escalation')} {rating.components.escalation}/2</b><small>{pick(language, `Ø ${decimal(rating.metrics.averageEscalation)} von 8 bei den Wertungen.`, `Average ${decimal(rating.metrics.averageEscalation)} of 8 at evaluations.`)}</small></p>
                 <p><b>{pick(language, 'Verantwortung', 'Responsibility')} {rating.components.responsibility}/2</b><small>{pick(language, `${rating.metrics.escalationActions} eskalierende Aktionen · +${rating.metrics.escalationPoints} Punkte · ${rating.metrics.deescalationActions}× Krisenkommunikation · netto ${rating.metrics.netResponsibility}.`, `${rating.metrics.escalationActions} escalatory actions · +${rating.metrics.escalationPoints} points · ${rating.metrics.deescalationActions}× Crisis Communications · net ${rating.metrics.netResponsibility}.`)}</small></p>
@@ -839,11 +1109,13 @@ const EndGameDialog = ({ state, onNewGame, onMainMenu }: { state: GameState; onN
   )
 }
 
-interface ModeSelectionProps {
+interface ModeSelectionProps extends MusicSettingsProps {
   language: Language
   onLanguage: (language: Language) => void
   rounds: RoundCount
   onRounds: (rounds: RoundCount) => void
+  matchup: MatchupId
+  onMatchup: (matchup: MatchupId) => void
   busy: boolean
   error?: string
   hasSavedSingleGame: boolean
@@ -856,7 +1128,7 @@ interface ModeSelectionProps {
   onResumeRoom: (session: OnlineSession) => void
 }
 
-const ModeSelection = ({ language, onLanguage, rounds, onRounds, busy, error, hasSavedSingleGame, hasSavedLocalGame, savedOnlineSession, onSingleplayer, onLocalPvp, onCreateRoom, onJoinRoom, onResumeRoom }: ModeSelectionProps) => {
+const ModeSelection = ({ language, onLanguage, rounds, onRounds, matchup, onMatchup, busy, error, hasSavedSingleGame, hasSavedLocalGame, savedOnlineSession, onSingleplayer, onLocalPvp, onCreateRoom, onJoinRoom, onResumeRoom, musicVolume, musicMuted, onMusicVolume, onMusicMuted, onMusicStart }: ModeSelectionProps) => {
   const queryRoom = new URLSearchParams(window.location.search).get('room') ?? ''
   const [joinCode, setJoinCode] = useState(queryRoom.toUpperCase())
   const [launchMode, setLaunchMode] = useState<'singleplayer' | 'local-pvp' | 'online'>()
@@ -869,19 +1141,22 @@ const ModeSelection = ({ language, onLanguage, rounds, onRounds, busy, error, ha
   }
 
   return (
-    <main className="mode-screen">
+    <main className="mode-screen" onClickCapture={onMusicStart} onKeyDownCapture={onMusicStart}>
       <div className="mode-backdrop" aria-hidden="true"><i /><i /><i /></div>
-      <div className="language-switcher" role="group" aria-label={pick(language, 'Sprache wählen', 'Choose language')}>
-        <button type="button" className={language === 'de' ? 'active' : ''} aria-pressed={language === 'de'} aria-label="Deutsch" title="Deutsch" onClick={() => onLanguage('de')}>
-          <span aria-hidden="true">🇩🇪</span><small>DE</small>
-        </button>
-        <button type="button" className={language === 'en' ? 'active' : ''} aria-pressed={language === 'en'} aria-label="English" title="English" onClick={() => onLanguage('en')}>
-          <span aria-hidden="true">🇬🇧</span><small>EN</small>
-        </button>
+      <div className="mode-utility-controls">
+        <div className="language-switcher" role="group" aria-label={pick(language, 'Sprache wählen', 'Choose language')}>
+          <button type="button" className={language === 'de' ? 'active' : ''} aria-pressed={language === 'de'} aria-label="Deutsch" title="Deutsch" onClick={() => onLanguage('de')}>
+            <span aria-hidden="true">🇩🇪</span><small>DE</small>
+          </button>
+          <button type="button" className={language === 'en' ? 'active' : ''} aria-pressed={language === 'en'} aria-label="English" title="English" onClick={() => onLanguage('en')}>
+            <span aria-hidden="true">🇬🇧</span><small>EN</small>
+          </button>
+        </div>
+        <AudioMenuButton musicVolume={musicVolume} musicMuted={musicMuted} onMusicVolume={onMusicVolume} onMusicMuted={onMusicMuted} onMusicStart={onMusicStart} />
       </div>
       <header className="mode-brand">
         <span className="mode-brand-mark">✦</span>
-        <div><span>SEA LINES OF</span><strong>COMMUNICATION</strong><small>{pick(language, 'MVP 6 · Kartenfluss, Freihafen und Führung', 'MVP 6 · Card flow, Freeport, and leadership')}</small></div>
+        <div><span>SEA LINES OF</span><strong>COMMUNICATION</strong><small>{pick(language, 'VERSION 1.0 · Staatsformen und Seewege', 'VERSION 1.0 · Governments and sea lines')}</small></div>
       </header>
       <section className="mode-intro">
         <span className="eyebrow">{pick(language, 'EINSATZBEREITSCHAFT HERSTELLEN', 'ESTABLISH READINESS')}</span>
@@ -948,7 +1223,7 @@ const ModeSelection = ({ language, onLanguage, rounds, onRounds, busy, error, ha
         <div className="modal-backdrop launch-backdrop" role="dialog" aria-modal="true" aria-labelledby="round-selection-title">
           <section className={`round-selection-dialog ${launchMode === 'online' ? 'is-online' : ''}`}>
             <span className="eyebrow">{pick(language, 'EINSATZDAUER', 'CAMPAIGN LENGTH')}</span>
-            <h2 id="round-selection-title">{pick(language, 'Wie viele Runden?', 'How many rounds?')}</h2>
+            <h2 id="round-selection-title">{pick(language, 'Runden und Staatsformen', 'Rounds and governments')}</h2>
             <p>{launchMode === 'online'
               ? pick(language, 'Du legst die Dauer für den neuen privaten Spielraum fest.', 'You set the length of the new private game room.')
               : pick(language, 'Wähle die Dauer der neuen Partie. Sechs Runden sind das Minimum.', 'Choose the length of the new game. Six rounds is the minimum.')}</p>
@@ -959,6 +1234,7 @@ const ModeSelection = ({ language, onLanguage, rounds, onRounds, busy, error, ha
                 </button>
               ))}
             </div>
+            <MatchupSelector value={matchup} onChange={onMatchup} />
             <div className="round-dialog-actions">
               <button className="mode-text-button" type="button" disabled={busy} onClick={() => setLaunchMode(undefined)}>{pick(language, 'Abbrechen', 'Cancel')}</button>
               <button className="mode-primary" type="button" disabled={busy} onClick={confirmLaunch}>
@@ -972,7 +1248,14 @@ const ModeSelection = ({ language, onLanguage, rounds, onRounds, busy, error, ha
   )
 }
 
-const OnlineLobby = ({ session, snapshot, connection, onLeave }: { session: OnlineSession; snapshot?: RoomSnapshot; connection: ConnectionStatus; onLeave: () => void }) => {
+interface OnlineLobbyProps extends MusicSettingsProps {
+  session: OnlineSession
+  snapshot?: RoomSnapshot
+  connection: ConnectionStatus
+  onLeave: () => void
+}
+
+const OnlineLobby = ({ session, snapshot, connection, onLeave, ...musicSettings }: OnlineLobbyProps) => {
   const language = useLanguage()
   const [copied, setCopied] = useState(false)
   const inviteUrl = `${window.location.origin}${window.location.pathname}?room=${session.roomCode}`
@@ -982,7 +1265,8 @@ const OnlineLobby = ({ session, snapshot, connection, onLeave }: { session: Onli
     window.setTimeout(() => setCopied(false), 1800)
   }
   return (
-    <main className="mode-screen lobby-screen">
+    <main className="mode-screen lobby-screen" onClickCapture={musicSettings.onMusicStart} onKeyDownCapture={musicSettings.onMusicStart}>
+      <div className="mode-utility-controls"><AudioMenuButton {...musicSettings} /></div>
       <header className="mode-brand compact"><span className="mode-brand-mark">✦</span><div><span>SEA LINES OF</span><strong>COMMUNICATION</strong></div></header>
       <section className="lobby-card">
         <span className="eyebrow">{pick(language, 'PRIVATER SPIELRAUM', 'PRIVATE GAME ROOM')}</span>
@@ -990,7 +1274,7 @@ const OnlineLobby = ({ session, snapshot, connection, onLeave }: { session: Onli
         <p>{snapshot?.status === 'waiting'
           ? pick(language, 'Teile den Link oder den Raumcode mit der zweiten Person. Du übernimmst die Blaue Koalition.', 'Share the link or room code with the second player. You command the Blue Coalition.')
           : `${pick(language, 'Dein Sitz als', 'Your seat as')} ${factionText(session.faction, language).adjective} ${pick(language, 'wird mit dem gemeinsamen Spielstand verbunden.', 'is connecting to the shared game state.')}`}</p>
-        {snapshot && <p><strong>{snapshot.state.maxRounds} {pick(language, 'Runden', 'Rounds')}</strong> · {pick(language, 'vom Host festgelegt', 'set by host')}</p>}
+        {snapshot && <p><strong>{snapshot.state.maxRounds} {pick(language, 'Runden', 'Rounds')}</strong> · {matchupText(snapshot.state.matchup, language)} · {pick(language, 'vom Host festgelegt', 'set by host')}</p>}
         <div className="room-code" aria-label={`${pick(language, 'Raumcode', 'Room code')} ${session.roomCode}`}>{session.roomCode.split('').map((letter, index) => <span key={`${letter}-${index}`}>{letter}</span>)}</div>
         <div className="lobby-actions">
           <button className="mode-primary" type="button" onClick={copyInvite}>{copied ? pick(language, 'Link kopiert', 'Link copied') : pick(language, 'Einladungslink kopieren', 'Copy invitation link')}</button>
@@ -1018,6 +1302,9 @@ const HandoffOverlay = ({ faction, onReady }: { faction: FactionId; onReady: () 
 function GameApp({ language, onLanguage }: { language: Language; onLanguage: (language: Language) => void }) {
   const [mode, setMode] = useState<'menu' | 'singleplayer' | 'local-pvp' | 'multiplayer'>('menu')
   const [selectedRounds, setSelectedRounds] = useState<RoundCount>(constants.DEFAULT_ROUNDS)
+  const [selectedMatchup, setSelectedMatchup] = useState<MatchupId>(constants.DEFAULT_MATCHUP)
+  const [musicVolume, setMusicVolume] = useState(loadMusicVolume)
+  const [musicMuted, setMusicMuted] = useState(loadMusicMuted)
   const [state, setState] = useState<GameState>(loadState)
   const [onlineSession, setOnlineSession] = useState<OnlineSession>()
   const [roomSnapshot, setRoomSnapshot] = useState<RoomSnapshot>()
@@ -1035,8 +1322,13 @@ function GameApp({ language, onLanguage }: { language: Language; onLanguage: (la
   const [error, setError] = useState<string>()
   const [showHelp, setShowHelp] = useState(false)
   const [showNewGame, setShowNewGame] = useState(false)
+  const [onlineTurnNotice, setOnlineTurnNotice] = useState<FactionId>()
+  const [onlineSetupNotice, setOnlineSetupNotice] = useState(false)
   const socketRef = useRef<WebSocket | null>(null)
   const pendingRevisionRef = useRef<number | undefined>(undefined)
+  const previousOnlineTurnRef = useRef<{ revision: number; activeFaction: FactionId; status: RoomSnapshot['status'] } | undefined>(undefined)
+  const suppressNextTurnNoticeRef = useRef(true)
+  const defaultDocumentTitleRef = useRef(document.title)
 
   const savedOnlineSession = useMemo(() => {
     try {
@@ -1055,12 +1347,22 @@ function GameApp({ language, onLanguage }: { language: Language; onLanguage: (la
   }, [state, mode])
 
   useEffect(() => {
+    try {
+      localStorage.setItem(MUSIC_VOLUME_KEY, String(musicVolume))
+      localStorage.setItem(MUSIC_MUTED_KEY, String(musicMuted))
+    } catch {
+      // Audio settings remain available for this session if storage is unavailable.
+    }
+  }, [musicVolume, musicMuted])
+
+  useEffect(() => {
     if (mode !== 'multiplayer' || !onlineSession) return
     let disposed = false
     let reconnectTimer: number | undefined
 
     const connect = () => {
       if (disposed) return
+      suppressNextTurnNoticeRef.current = true
       setConnection((current) => current === 'connected' ? 'reconnecting' : 'connecting')
       const socket = new WebSocket(socketUrl(onlineSession))
       socketRef.current = socket
@@ -1072,6 +1374,21 @@ function GameApp({ language, onLanguage }: { language: Language; onLanguage: (la
         try {
           const message = JSON.parse(String(event.data)) as unknown
           if (isRoomSnapshot(message)) {
+            const previous = previousOnlineTurnRef.current
+            const suppressNotice = suppressNextTurnNoticeRef.current
+            suppressNextTurnNoticeRef.current = false
+            if (!suppressNotice
+              && previous
+              && message.revision > previous.revision
+              && previous.status === 'playing'
+              && message.status === 'playing'
+              && previous.activeFaction !== onlineSession.faction
+              && message.state.activeFaction === onlineSession.faction) {
+              setOnlineTurnNotice(onlineSession.faction)
+            } else if (message.state.activeFaction !== onlineSession.faction || message.status !== 'playing') {
+              setOnlineTurnNotice(undefined)
+            }
+            previousOnlineTurnRef.current = { revision: message.revision, activeFaction: message.state.activeFaction, status: message.status }
             setRoomSnapshot(message)
             setState(message.state)
             if (pendingRevisionRef.current === undefined || message.revision > pendingRevisionRef.current) {
@@ -1110,6 +1427,13 @@ function GameApp({ language, onLanguage }: { language: Language; onLanguage: (la
   }, [mode, onlineSession, language])
 
   useEffect(() => {
+    document.title = onlineTurnNotice
+      ? pick(language, 'Du bist am Zug · Sea Lines of Communication', 'Your turn · Sea Lines of Communication')
+      : defaultDocumentTitleRef.current
+    return () => { document.title = defaultDocumentTitleRef.current }
+  }, [onlineTurnNotice, language])
+
+  useEffect(() => {
     if (mode !== 'singleplayer' || state.phase !== 'action' || state.activeFaction !== 'red') {
       setAiThinking(false)
       return
@@ -1128,6 +1452,31 @@ function GameApp({ language, onLanguage }: { language: Language; onLanguage: (la
 
   const isOnline = mode === 'multiplayer'
   const isLocalPvp = mode === 'local-pvp'
+  const isPreGameMenu = mode === 'menu'
+    || (isOnline && Boolean(onlineSession) && roomSnapshot?.status !== 'playing' && roomSnapshot?.status !== 'complete')
+  const desiredMusicTrack = isPreGameMenu || state.escalation <= 3
+    ? MUSIC_TRACKS.title
+    : state.escalation === constants.MAX_ESCALATION
+      ? MUSIC_TRACKS.maximum
+      : MUSIC_TRACKS.high
+  const [musicTrack, setMusicTrack] = useState(desiredMusicTrack)
+  useEffect(() => {
+    if (desiredMusicTrack === musicTrack) return
+    if (isPreGameMenu) {
+      setMusicTrack(MUSIC_TRACKS.title)
+      return
+    }
+    const timer = window.setTimeout(() => setMusicTrack(desiredMusicTrack), MUSIC_TRACK_STABILITY_MS)
+    return () => window.clearTimeout(timer)
+  }, [desiredMusicTrack, isPreGameMenu, musicTrack])
+  const startMusic = useGameMusic(musicTrack, musicMuted ? 0 : musicVolume)
+  const musicSettings: MusicSettingsProps = {
+    musicVolume,
+    musicMuted,
+    onMusicVolume: setMusicVolume,
+    onMusicMuted: setMusicMuted,
+    onMusicStart: startMusic,
+  }
   const viewerFaction: FactionId = isOnline && onlineSession ? onlineSession.faction : isLocalPvp ? state.activeFaction : 'blue'
   const visibleState = useMemo(
     () => isOnline ? state : createFactionView(state, viewerFaction),
@@ -1235,7 +1584,7 @@ function GameApp({ language, onLanguage }: { language: Language; onLanguage: (la
 
   const restartSingleplayer = () => {
     if (state.phase !== 'complete' && !window.confirm(pick(language, 'Laufende Partie wirklich verwerfen und neu beginnen?', 'Discard the current game and start again?'))) return
-    const fresh = createInitialState(state.maxRounds)
+    const fresh = createInitialState(state.maxRounds, state.matchup)
     setState(fresh)
     setInspected('central_basin')
     clearSelection()
@@ -1244,7 +1593,7 @@ function GameApp({ language, onLanguage }: { language: Language; onLanguage: (la
   const restartCurrentLocalGame = () => {
     if (mode !== 'local-pvp') return restartSingleplayer()
     if (state.phase !== 'complete' && !window.confirm(pick(language, 'Laufende Partie wirklich verwerfen und neu beginnen?', 'Discard the current game and start again?'))) return
-    const fresh = createInitialState(state.maxRounds)
+    const fresh = createInitialState(state.maxRounds, state.matchup)
     setState(fresh)
     localStorage.setItem(LOCAL_PVP_STORAGE_KEY, JSON.stringify(fresh))
     setHandoffReady(false)
@@ -1252,15 +1601,15 @@ function GameApp({ language, onLanguage }: { language: Language; onLanguage: (la
     clearSelection()
   }
 
-  const confirmNewGame = (rounds: RoundCount) => {
+  const confirmNewGame = (rounds: RoundCount, matchup: MatchupId) => {
     try {
       if (isOnline) {
         if (!roomSnapshot || socketRef.current?.readyState !== WebSocket.OPEN) throw new Error('Die Online-Verbindung ist noch nicht bereit.')
-        socketRef.current.send(JSON.stringify({ type: 'request-rematch', maxRounds: rounds, revision: roomSnapshot.revision } satisfies RoomCommand))
+        socketRef.current.send(JSON.stringify({ type: 'request-rematch', maxRounds: rounds, matchup, revision: roomSnapshot.revision } satisfies RoomCommand))
         pendingRevisionRef.current = roomSnapshot.revision
         setSubmitting(true)
       } else {
-        const fresh = createInitialState(rounds)
+        const fresh = createInitialState(rounds, matchup)
         setState(fresh)
         if (isLocalPvp) {
           localStorage.setItem(LOCAL_PVP_STORAGE_KEY, JSON.stringify(fresh))
@@ -1292,7 +1641,7 @@ function GameApp({ language, onLanguage }: { language: Language; onLanguage: (la
   const startSingleplayer = (fresh: boolean) => {
     setError(undefined)
     if (fresh) {
-      const initial = createInitialState(selectedRounds)
+      const initial = createInitialState(selectedRounds, selectedMatchup)
       setState(initial)
       localStorage.setItem(STORAGE_KEY, JSON.stringify(initial))
     } else {
@@ -1305,7 +1654,7 @@ function GameApp({ language, onLanguage }: { language: Language; onLanguage: (la
 
   const startLocalPvp = (fresh: boolean) => {
     setError(undefined)
-    const initial = fresh ? createInitialState(selectedRounds) : loadState(LOCAL_PVP_STORAGE_KEY)
+    const initial = fresh ? createInitialState(selectedRounds, selectedMatchup) : loadState(LOCAL_PVP_STORAGE_KEY)
     setState(initial)
     if (fresh) localStorage.setItem(LOCAL_PVP_STORAGE_KEY, JSON.stringify(initial))
     setInspected('central_basin')
@@ -1314,10 +1663,14 @@ function GameApp({ language, onLanguage }: { language: Language; onLanguage: (la
     clearSelection()
   }
 
-  const enterOnlineSession = (session: OnlineSession, snapshot?: RoomSnapshot) => {
+  const enterOnlineSession = (session: OnlineSession, snapshot?: RoomSnapshot, showSetup = false) => {
     sessionStorage.setItem(ONLINE_SESSION_KEY, JSON.stringify(session))
     setOnlineSession(session)
     setRoomSnapshot(snapshot)
+    previousOnlineTurnRef.current = snapshot ? { revision: snapshot.revision, activeFaction: snapshot.state.activeFaction, status: snapshot.status } : undefined
+    suppressNextTurnNoticeRef.current = true
+    setOnlineTurnNotice(undefined)
+    setOnlineSetupNotice(showSetup)
     if (snapshot) setState(snapshot.state)
     setConnection('connecting')
     setMode('multiplayer')
@@ -1330,7 +1683,7 @@ function GameApp({ language, onLanguage }: { language: Language; onLanguage: (la
     setLauncherBusy(true)
     setError(undefined)
     try {
-      const response = await createOnlineRoom(selectedRounds)
+      const response = await createOnlineRoom(selectedRounds, selectedMatchup)
       enterOnlineSession(response.session, response.snapshot)
     } catch (reason) {
       setLauncherBusy(false)
@@ -1343,7 +1696,7 @@ function GameApp({ language, onLanguage }: { language: Language; onLanguage: (la
     setError(undefined)
     try {
       const response = await joinOnlineRoom(code)
-      enterOnlineSession(response.session, response.snapshot)
+      enterOnlineSession(response.session, response.snapshot, true)
       const url = new URL(window.location.href)
       url.searchParams.delete('room')
       window.history.replaceState({}, '', url)
@@ -1362,6 +1715,9 @@ function GameApp({ language, onLanguage }: { language: Language; onLanguage: (la
     setLauncherBusy(false)
     pendingRevisionRef.current = undefined
     setSubmitting(false)
+    setOnlineTurnNotice(undefined)
+    setOnlineSetupNotice(false)
+    previousOnlineTurnRef.current = undefined
     setMode('menu')
     clearSelection()
   }
@@ -1373,28 +1729,31 @@ function GameApp({ language, onLanguage }: { language: Language; onLanguage: (la
         onLanguage={onLanguage}
         rounds={selectedRounds}
         onRounds={setSelectedRounds}
+        matchup={selectedMatchup}
+        onMatchup={setSelectedMatchup}
         busy={launcherBusy}
         error={error}
-        hasSavedSingleGame={Boolean(localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(V5_STORAGE_KEY) ?? localStorage.getItem(V4_STORAGE_KEY) ?? localStorage.getItem(V3_STORAGE_KEY) ?? localStorage.getItem(V2_STORAGE_KEY) ?? localStorage.getItem(LEGACY_STORAGE_KEY))}
-        hasSavedLocalGame={Boolean(localStorage.getItem(LOCAL_PVP_STORAGE_KEY) ?? localStorage.getItem(V5_LOCAL_PVP_STORAGE_KEY) ?? localStorage.getItem(V4_LOCAL_PVP_STORAGE_KEY))}
+        hasSavedSingleGame={Boolean(localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(V6_STORAGE_KEY) ?? localStorage.getItem(V5_STORAGE_KEY) ?? localStorage.getItem(V4_STORAGE_KEY) ?? localStorage.getItem(V3_STORAGE_KEY) ?? localStorage.getItem(V2_STORAGE_KEY) ?? localStorage.getItem(LEGACY_STORAGE_KEY))}
+        hasSavedLocalGame={Boolean(localStorage.getItem(LOCAL_PVP_STORAGE_KEY) ?? localStorage.getItem(V6_LOCAL_PVP_STORAGE_KEY) ?? localStorage.getItem(V5_LOCAL_PVP_STORAGE_KEY) ?? localStorage.getItem(V4_LOCAL_PVP_STORAGE_KEY))}
         savedOnlineSession={savedOnlineSession}
         onSingleplayer={startSingleplayer}
         onLocalPvp={startLocalPvp}
         onCreateRoom={createRoom}
         onJoinRoom={joinRoom}
         onResumeRoom={(session) => enterOnlineSession(session)}
+        {...musicSettings}
       />
     )
   }
 
   if (isOnline && onlineSession && roomSnapshot?.status !== 'playing' && roomSnapshot?.status !== 'complete') {
-    return <OnlineLobby session={onlineSession} snapshot={roomSnapshot} connection={connection} onLeave={leaveToMenu} />
+    return <OnlineLobby session={onlineSession} snapshot={roomSnapshot} connection={connection} onLeave={leaveToMenu} {...musicSettings} />
   }
 
   const escalationBand = getEscalationBand(state.escalation)
 
   return (
-    <div className={`app-shell ${factionClass(state.activeFaction)}`}>
+    <div className={`app-shell ${factionClass(state.activeFaction)}`} onClickCapture={startMusic} onKeyDownCapture={startMusic}>
       <header className="topbar">
         <div className="brand-mark" aria-hidden="true"><span>✦</span></div>
         <div className="brand-copy"><span>SEA LINES OF</span><strong>COMMUNICATION</strong><small>{isOnline ? `ONLINE · ${pick(language, 'DU', 'YOU')}: ${factionText(viewerFaction, language).adjective}` : isLocalPvp ? pick(language, 'LOKALES PVP · PASS-AND-PLAY', 'LOCAL PVP · PASS-AND-PLAY') : pick(language, 'EINZELSPIELER · DU: BLAU', 'SINGLE PLAYER · YOU: BLUE')}</small></div>
@@ -1410,7 +1769,7 @@ function GameApp({ language, onLanguage }: { language: Language; onLanguage: (la
           </div>
           <strong>{state.escalation}<small>/{constants.MAX_ESCALATION}</small></strong>
         </div>
-        <GameMenu onMainMenu={leaveToMenu} onNewGame={() => setShowNewGame(true)} onHelp={() => setShowHelp(true)} />
+        <GameMenu onMainMenu={leaveToMenu} onNewGame={() => setShowNewGame(true)} onHelp={() => setShowHelp(true)} {...musicSettings} />
       </header>
 
       <main className="game-grid">
@@ -1469,8 +1828,33 @@ function GameApp({ language, onLanguage }: { language: Language; onLanguage: (la
       {(!isOnline || !roomSnapshot?.rematchProposal) && <EndGameDialog state={state} onNewGame={() => setShowNewGame(true)} onMainMenu={leaveToMenu} />}
       {isLocalPvp && !handoffReady && state.phase === 'action' && <HandoffOverlay faction={state.activeFaction} onReady={() => setHandoffReady(true)} />}
       {showHelp && <HelpDialog onClose={() => setShowHelp(false)} />}
-      {showNewGame && <NewGameDialog initialRounds={state.maxRounds} online={isOnline} onClose={() => setShowNewGame(false)} onConfirm={confirmNewGame} />}
+      {showNewGame && <NewGameDialog initialRounds={state.maxRounds} initialMatchup={state.matchup} online={isOnline} onClose={() => setShowNewGame(false)} onConfirm={confirmNewGame} />}
       {isOnline && roomSnapshot && onlineSession && <RematchDialog snapshot={roomSnapshot} faction={onlineSession.faction} onAccept={() => handleRematch('accept-rematch')} onDecline={() => handleRematch('decline-rematch')} onCancel={() => handleRematch('cancel-rematch')} />}
+      {isOnline && onlineSetupNotice && onlineSession && (
+        <div className="modal-backdrop online-setup-backdrop" role="dialog" aria-modal="true" aria-labelledby="online-setup-title">
+          <section className={`handoff-dialog online-setup ${factionClass(onlineSession.faction)}`}>
+            <span className="result-compass">◇</span>
+            <span className="eyebrow">{pick(language, 'ONLINE · EINSATZBEREIT', 'ONLINE · READY')}</span>
+            <h2 id="online-setup-title">{matchupText(state.matchup, language)}</h2>
+            <p>{pick(language, 'Der Host hat die Staatsformen festgelegt.', 'The host selected the governments.')}</p>
+            <div className="setup-government-summary">
+              {(['blue', 'red'] as const).map((faction) => <span className={factionClass(faction)} key={faction}><b>{factionText(faction, language).adjective}: {governmentText(state.governments[faction], language).name}</b><small>{governmentText(state.governments[faction], language).benefit}</small></span>)}
+            </div>
+            <button className="confirm-button" type="button" autoFocus onClick={() => setOnlineSetupNotice(false)}>{pick(language, 'Partie betreten', 'Enter game')}</button>
+          </section>
+        </div>
+      )}
+      {isOnline && onlineTurnNotice === viewerFaction && state.phase === 'action' && state.activeFaction === viewerFaction && (
+        <div className="modal-backdrop turn-notice-backdrop" role="dialog" aria-modal="true" aria-labelledby="turn-notice-title">
+          <section className={`handoff-dialog turn-notice ${factionClass(viewerFaction)}`}>
+            <span className="result-compass">✦</span>
+            <span className="eyebrow">{pick(language, 'ONLINE · INITIATIVEWECHSEL', 'ONLINE · INITIATIVE CHANGE')}</span>
+            <h2 id="turn-notice-title">{pick(language, 'Du bist am Zug', 'Your turn')}</h2>
+            <p>{factionText(viewerFaction, language).name} · {governmentText(state.governments[viewerFaction], language).name} · {pick(language, `Runde ${state.round}`, `Round ${state.round}`)}</p>
+            <button className="confirm-button" type="button" autoFocus onClick={() => setOnlineTurnNotice(undefined)}>{pick(language, 'Zug übernehmen', 'Take turn')}</button>
+          </section>
+        </div>
+      )}
     </div>
   )
 }

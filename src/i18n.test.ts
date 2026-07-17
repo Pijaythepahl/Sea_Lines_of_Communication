@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cardText, formatLogEntry, formatWinnerReason, regionText } from './i18n'
+import { cardText, formatLogEntry, formatWinnerReason, governmentText, matchupText, regionText } from './i18n'
 
 describe('Lokalisierung', () => {
   it('übersetzt Karten und Kartenorte ohne den Spielzustand zu verändern', () => {
@@ -20,5 +20,11 @@ describe('Lokalisierung', () => {
   it('übersetzt Siegerbegründungen für jede lokale Ansicht', () => {
     const winner = { faction: 'blue' as const, reason: 'Deutscher Rückfalltext', reasonCode: 'economy' as const }
     expect(formatWinnerReason(winner, 'en')).toBe('Blue Coalition achieves the higher total economic yield.')
+  })
+
+  it('beschreibt Staatsformen und Paarungen in beiden Sprachen', () => {
+    expect(governmentText('democracy', 'de').benefit).toContain('0–2')
+    expect(governmentText('autocracy', 'en').name).toBe('Autocracy')
+    expect(matchupText('democracy-autocracy', 'en')).toBe('Democracy vs Autocracy')
   })
 })

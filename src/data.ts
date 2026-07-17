@@ -129,14 +129,14 @@ export const CARD_ORDER: CardId[] = [
 export const CARDS: Record<CardId, CardDefinition> = {
   patrol_group: {
     id: 'patrol_group', title: 'Patrouillenverband', domain: 'Präsenz', icon: '⚓', cost: 1, target: 'region-pair',
-    description: 'Verlege 1 Präsenz in eine angrenzende Region.', instruction: 'Wähle zuerst den Ausgangsraum, dann den Zielraum.',
-    playHint: 'Spielbar, wenn du in einer Region mindestens 1 Präsenz besitzt und eine benachbarte Region noch Präsenz aufnehmen kann. Zuerst Quelle, dann Nachbarregion wählen.',
+    description: 'Verlege 1 Präsenz ein oder zwei Regionen weit.', instruction: 'Wähle zuerst den Ausgangsraum, dann ein Ziel in bis zu zwei Feldern Entfernung.',
+    playHint: 'Verlegt 1 Präsenz für 1 AP. Bei zwei Feldern muss ein nicht verwehrter Zwischenraum existieren; dieser wird automatisch ermittelt.',
     escalation: 0,
   },
   forward_deployment: {
     id: 'forward_deployment', title: 'Vorausstationierung', domain: 'Präsenz', icon: '▲', cost: 2, target: 'region',
-    description: '+1 Präsenz und bis zu +1 Lagebild in einer logistisch erschlossenen Region.', instruction: 'Wähle eine Region mit eigener aktiver Logistik.',
-    playHint: 'Nur in einer Region mit mindestens 1 aktiver eigener Logistik und weniger als 3 eigener Präsenz spielbar. Präsenz verbessert das Lagebild bis maximal 2.',
+    description: '+1 Präsenz und bis zu +1 Lagebild im Heimatmeer oder an einem versorgten Vorposten.', instruction: 'Wähle das Heimatmeer oder einen über eine eigene SLOC versorgten Vorposten.',
+    playHint: 'Vorposten benötigen aktiven Zugang, aktive Logistik und eine nicht verwehrte Verbindung zum Heimatmeer. Präsenz verbessert das Lagebild bis maximal 2.',
     escalation: 1, escalationReason: 'Sichtbare Verstärkung vorgeschobener Kräfte',
   },
   isr_recon: {
