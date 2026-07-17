@@ -8,6 +8,8 @@ import {
   endTurn,
   evaluateChokepoint,
   getEffectiveResources,
+  getValidRegionTargets,
+  hasSupplyConnection,
   getUsability,
   migrateGameState,
   playCard,
@@ -49,21 +51,35 @@ describe('relative Nutzbarkeit', () => {
 })
 
 describe('Engpass und Handelsrouten', () => {
+  it('vergibt Staatsformboni nur in den vereinbarten Eskalationsfenstern', () => {
+    const state = createInitialState(6, 'democracy-autocracy')
+    for (const [escalation, democracy, autocracy] of [[0, 1, 0], [2, 1, 0], [3, 0, 1], [5, 0, 1], [6, 0, 0], [8, 0, 0]] as const) {
+      state.escalation = escalation
+      expect(calculateRouteYield(state, 'blue_main').governmentBonus).toBe(democracy)
+      expect(calculateRouteYield(state, 'red_main').governmentBonus).toBe(autocracy)
+    }
+    state.escalation = 3
+    state.roundEscalation.red = 1
+    expect(calculateRouteYield(state, 'red_main')).toMatchObject({ governmentBonus: 1, responsibilityPenalty: 1 })
+    state.regions.western_sea.resources.blue.access = 0
+    expect(calculateRouteYield(state, 'blue_main')).toMatchObject({ blocked: true, governmentBonus: 0 })
+  })
+
   it('sperrt die gegnerische Hauptroute, aber nicht deren Ausweichroute', () => {
     const state = createInitialState()
     state.regions.meridian_strait.resources.red.presence = 2
     state.regions.meridian_strait.resources.red.access = 1
     expect(evaluateChokepoint(state)).toBe('red')
     expect(calculateRouteYield(state, 'blue_main').blocked).toBe(true)
-    expect(calculateRouteYield(state, 'blue_detour')).toMatchObject({ blocked: false, yield: 3 })
+    expect(calculateRouteYield(state, 'blue_detour')).toMatchObject({ blocked: false, yield: 4, governmentBonus: 1 })
   })
 
   it('reduziert den Malus einer umkämpften Route durch Konvoisicherung', () => {
     const state = createInitialState()
     state.regions.central_basin.resources.red.presence = 1
-    expect(calculateRouteYield(state, 'blue_main').yield).toBe(5)
-    state.protections.push({ id: 'test', faction: 'blue', routeId: 'blue_main', amount: 1, expiresAfterRound: 1 })
     expect(calculateRouteYield(state, 'blue_main').yield).toBe(6)
+    state.protections.push({ id: 'test', faction: 'blue', routeId: 'blue_main', amount: 1, expiresAfterRound: 1 })
+    expect(calculateRouteYield(state, 'blue_main').yield).toBe(7)
   })
 
   it('baut die Ausweichroute mit Zusätzlicher Tonnage für 1 AP dauerhaft bis höchstens 5 aus', () => {
@@ -85,11 +101,44 @@ describe('Engpass und Handelsrouten', () => {
     state.routeCapacity.blue_detour = 5
     state.regions.meridian_strait.resources.red = { presence: 2, awareness: 0, access: 1, logistics: 0 }
     expect(calculateRouteYield(state, 'blue_main').blocked).toBe(true)
-    expect(calculateRouteYield(state, 'blue_detour').yield).toBe(5)
+    expect(calculateRouteYield(state, 'blue_detour').yield).toBe(6)
   })
 })
 
 describe('Karten und Rundenfolge', () => {
+  it('verstärkt nur das Heimatmeer oder einen über Zugang, Logistik und SLOC versorgten Vorposten', () => {
+    const state = createInitialState(6, 'autocracy-autocracy')
+    expect(getValidRegionTargets(state, 'forward_deployment')).toEqual(['western_sea'])
+
+    state.regions.central_basin.resources.blue.access = 1
+    state.regions.central_basin.resources.blue.logistics = 1
+    expect(hasSupplyConnection(state, 'central_basin', 'blue')).toBe(true)
+    expect(getValidRegionTargets(state, 'forward_deployment')).toContain('central_basin')
+
+    state.suspensions.push({ id: 'test-logistics', faction: 'blue', regionId: 'central_basin', resource: 'logistics', amount: 1, expiresAfterRound: 1 })
+    expect(hasSupplyConnection(state, 'central_basin', 'blue')).toBe(false)
+    state.suspensions = []
+
+    state.regions.northwest_passage.resources.red = { presence: 3, awareness: 3, access: 0, logistics: 0 }
+    expect(getUsability(state, 'northwest_passage', 'blue')).toBe('denied')
+    expect(hasSupplyConnection(state, 'central_basin', 'blue')).toBe(false)
+    state.regions.freeport_sea.resources.blue.logistics = 1
+    expect(hasSupplyConnection(state, 'freeport_sea', 'blue')).toBe(true)
+  })
+
+  it('verlegt Präsenz ein oder zwei Felder, ohne verwehrte Zwischenräume zu überspringen', () => {
+    const state = createInitialState(6, 'autocracy-autocracy')
+    const openTargets = getValidRegionTargets(state, 'patrol_group', ['western_sea'])
+    expect(openTargets).toEqual(expect.arrayContaining(['northwest_passage', 'southwest_arc', 'central_basin', 'freeport_sea']))
+
+    state.regions.southwest_arc.resources.red.presence = 3
+    const blockedTargets = getValidRegionTargets(state, 'patrol_group', ['western_sea'])
+    expect(blockedTargets).not.toContain('freeport_sea')
+    expect(blockedTargets).toContain('central_basin')
+    state.regions.central_basin.resources.blue.presence = 3
+    expect(getValidRegionTargets(state, 'patrol_group', ['western_sea'])).not.toContain('central_basin')
+  })
+
   it('verbessert beim Aufbau von Präsenz das Lagebild bis 2, aber nicht beim bloßen Verlegen', () => {
     const state = createInitialState()
     const deployment = putCardInBlueHand(state, 'forward_deployment')
@@ -168,7 +217,7 @@ describe('Karten und Rundenfolge', () => {
   it('vergibt höchstens einen Ruhebonus für einen friedlichen Zug mit Rest-AP', () => {
     const state = createInitialState()
     state.endedActionPoints.blue = 3
-    expect(calculateRoundYield(state, 'blue')).toMatchObject({ yield: 7, restraintBonus: 1 })
+    expect(calculateRoundYield(state, 'blue')).toMatchObject({ yield: 8, governmentBonus: 1, restraintBonus: 1 })
     state.roundEscalation.blue = 1
     expect(calculateRoundYield(state, 'blue')).toMatchObject({ restraintBonus: 0 })
   })
@@ -242,18 +291,36 @@ describe('Karten und Rundenfolge', () => {
     const card = putCardInBlueHand(state, 'isr_recon')
     expect(() => playCard(state, { instanceId: card.instanceId, regions: ['central_basin'] })).toThrow(/nicht zulässig/)
   })
+
+  it('behält mehr als 16 Operationsmeldungen vollständig und in neuester Reihenfolge', () => {
+    let state = createInitialState(18)
+    for (let index = 0; index < 20; index += 1) state = endTurn(state)
+    expect(state.log.length).toBeGreaterThan(16)
+    expect(state.log[0].round).toBeGreaterThanOrEqual(state.log.at(-1)!.round)
+    expect(state.log.at(-1)?.code).toBe('game-start')
+  })
 })
 
 describe('Migration und Abschlussbewertung', () => {
-  it('migriert ältere Spielstände auf MVP 6 und sechs Runden', () => {
+  it('initialisiert alle Staatsform-Paarungen für jede Partielänge', () => {
+    for (const rounds of [6, 12, 18] as const) {
+      expect(createInitialState(rounds, 'democracy-democracy').governments).toEqual({ blue: 'democracy', red: 'democracy' })
+      expect(createInitialState(rounds, 'democracy-autocracy').governments).toEqual({ blue: 'democracy', red: 'autocracy' })
+      expect(createInitialState(rounds, 'autocracy-autocracy').governments).toEqual({ blue: 'autocracy', red: 'autocracy' })
+    }
+  })
+
+  it('migriert ältere Spielstände auf Version 7, sechs Runden und Demokratie gegen Demokratie', () => {
     const legacy = structuredClone(createInitialState()) as unknown as Record<string, unknown>
     legacy.version = 4
     delete legacy.maxRounds
     delete legacy.routeCapacity
     delete legacy.covertOperations
     const migrated = migrateGameState(legacy)
-    expect(migrated.version).toBe(6)
+    expect(migrated.version).toBe(7)
     expect(migrated.maxRounds).toBe(6)
+    expect(migrated.matchup).toBe('democracy-democracy')
+    expect(migrated.governments).toEqual({ blue: 'democracy', red: 'democracy' })
     expect(migrated.routeCapacity).toMatchObject({ blue_main: 6, blue_detour: 3 })
     expect(migrated.covertOperations).toEqual([])
   })
@@ -302,6 +369,23 @@ describe('Migration und Abschlussbewertung', () => {
     expect(calculateLeadershipRating(long, 'blue').components.economy).toBe(1)
   })
 
+  it('bewertet das Ergebnis anhand des Punkteabstands pro Runde', () => {
+    const state = createInitialState(6)
+    state.economicScore = { blue: 12, red: 15 }
+    expect(calculateLeadershipRating(state, 'blue').components.result).toBe(1.5)
+    expect(calculateLeadershipRating(state, 'red').components.result).toBe(2.5)
+    state.economicScore = { blue: 10, red: 10 }
+    expect(calculateLeadershipRating(state, 'blue').components.result).toBe(2)
+    state.economicScore = { blue: 0, red: 30 }
+    expect(calculateLeadershipRating(state, 'blue').components.result).toBe(0)
+    expect(calculateLeadershipRating(state, 'red').components.result).toBe(4)
+
+    const long = createInitialState(12)
+    long.economicScore = { blue: 12, red: 15 }
+    expect(calculateLeadershipRating(long, 'blue').components.result).toBe(1.7)
+    expect(calculateLeadershipRating(long, 'red').components.result).toBe(2.3)
+  })
+
   it('berechnet Sterne getrennt vom wirtschaftlichen Sieger', () => {
     const state = createInitialState()
     state.phase = 'complete'
@@ -309,7 +393,7 @@ describe('Migration und Abschlussbewertung', () => {
     state.lastEvaluationEscalation = 8
     state.totalEscalation.blue = 8
     state.winner = { faction: 'blue', reason: 'Test' }
-    expect(calculateLeadershipRating(state, 'blue')).toMatchObject({ score: 6, stars: 3, label: 'Kostspielige Führung' })
+    expect(calculateLeadershipRating(state, 'blue')).toMatchObject({ score: 5.8, stars: 3, label: 'Kostspielige Führung' })
     expect(calculateLeadershipRating(state, 'red').stars).toBeGreaterThanOrEqual(1)
   })
 

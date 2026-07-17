@@ -201,8 +201,8 @@ button:focus-visible, [role="button"]:focus-visible { outline: 3px solid var(--b
 
 .briefing p { margin: 0; font-family: Georgia, serif; color: #42535c; font-size: 11px; line-height: 1.45; }
 .formula { margin-top: 9px; padding: 7px; text-align: center; color: var(--brass-light); background: var(--navy-900); font-size: 10px; font-weight: 800; letter-spacing: .08em; }
-.log-panel { flex: 1; min-height: 150px; overflow: hidden; }
-.log-panel ol { list-style: none; margin: 0; padding: 0; }
+.log-panel { flex: 1; min-height: 150px; display: flex; flex-direction: column; overflow: hidden; }
+.log-panel ol { flex: 1; min-height: 0; list-style: none; margin: 0; padding: 0 5px 0 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgba(39,78,97,.45) transparent; }
 .log-panel li { display: grid; grid-template-columns: 25px 1fr; gap: 7px; padding: 6px 0; border-bottom: 1px dotted rgba(28,57,72,.14); }
 .log-panel li > span { display: grid; place-items: center; width: 23px; height: 18px; color: white; background: #71818a; font-size: 8px; font-weight: 800; }
 .log-panel li.is-blue > span { background: var(--blue); }
@@ -243,10 +243,16 @@ button:focus-visible, [role="button"]:focus-visible { outline: 3px solid var(--b
 @keyframes targetPulse { 50% { fill: rgba(215,184,121,.34); } }
 
 .map-route .route-line { fill: none; stroke-width: 2.2; pointer-events: none; opacity: .72; }
+.map-route .route-flow { fill: none; pointer-events: none; stroke-width: 3.8; stroke-linecap: round; stroke-dasharray: 1 9; opacity: .78; animation: routeFlow linear infinite; }
 .map-route.is-blue .route-line { stroke: var(--blue); }
 .map-route.is-red .route-line { stroke: var(--red); }
+.map-route.is-blue .route-flow { stroke: #91dcf5; }
+.map-route.is-red .route-flow { stroke: #ffb19f; }
 .map-route.detour .route-line { stroke-dasharray: 6 6; opacity: .48; }
 .map-route.blocked .route-line { stroke: #6b6e6d; stroke-dasharray: 3 7; opacity: .45; }
+.map-route.flow-stopped .route-flow { animation: none; opacity: .28; }
+.map-route.blocked .route-flow { stroke: #777c7d; opacity: .2; }
+@keyframes routeFlow { to { stroke-dashoffset: -10; } }
 .route-hitbox { fill: none; stroke: transparent; stroke-width: 14; cursor: default; }
 .map-route.valid-route .route-hitbox { cursor: pointer; }
 .map-route.valid-route .route-line { stroke: var(--brass-light); stroke-width: 5; opacity: 1; filter: drop-shadow(0 0 3px rgba(179,138,69,.8)); }
@@ -384,7 +390,7 @@ button:focus-visible, [role="button"]:focus-visible { outline: 3px solid var(--b
 .empty-hand { width: 100%; display: grid; place-items: center; color: var(--muted); font-family: Georgia, serif; font-style: italic; }
 
 .card-hover-help {
-  position: fixed;
+  position: absolute;
   z-index: 120;
   width: 290px;
   padding: 12px;
@@ -394,7 +400,7 @@ button:focus-visible, [role="button"]:focus-visible { outline: 3px solid var(--b
   border-top: 4px solid var(--blue);
   box-shadow: 0 16px 40px rgba(4, 20, 31, .35), inset 0 0 0 3px rgba(255,255,255,.55);
   pointer-events: none;
-  animation: cardHelpIn .16s ease-out;
+  animation: none;
 }
 .card-hover-help.is-red { border-top-color: var(--red); }
 .card-hover-help::after {
@@ -409,7 +415,6 @@ button:focus-visible, [role="button"]:focus-visible { outline: 3px solid var(--b
   border-bottom: 1px solid var(--brass);
   transform: rotate(45deg);
 }
-@keyframes cardHelpIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 .hover-help-heading { display: flex; align-items: center; gap: 9px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
 .hover-help-heading > span { width: 34px; height: 34px; display: grid; place-items: center; flex: 0 0 auto; color: var(--brass-light); background: var(--navy-900); border: 1px solid var(--brass); font-family: Georgia, serif; font-size: 18px; }
 .hover-help-heading .resource-icon-svg { width: 21px; height: 21px; }
@@ -550,7 +555,7 @@ button:focus-visible, [role="button"]:focus-visible { outline: 3px solid var(--b
 .mode-footer i { width: 3px; height: 3px; background: var(--brass); transform: rotate(45deg); }
 
 .launch-backdrop { z-index: 150; }
-.round-selection-dialog { width: min(520px, 92vw); padding: 34px 38px 30px; color: var(--ink); text-align: center; background: linear-gradient(145deg, #faf7ed, #e3dcc9); border: 2px solid var(--brass); border-top: 6px solid var(--blue); box-shadow: 0 28px 80px rgba(0,0,0,.5), inset 0 0 0 5px rgba(9,37,55,.06); }
+.round-selection-dialog { width: min(680px, 92vw); max-height: 92vh; padding: 34px 38px 30px; color: var(--ink); text-align: center; background: linear-gradient(145deg, #faf7ed, #e3dcc9); border: 2px solid var(--brass); border-top: 6px solid var(--blue); box-shadow: 0 28px 80px rgba(0,0,0,.5), inset 0 0 0 5px rgba(9,37,55,.06); overflow-y: auto; }
 .round-selection-dialog.is-online { border-top-color: var(--red); }
 .round-selection-dialog h2 { margin: 7px 0 9px; font-family: Georgia, serif; font-size: 29px; text-transform: uppercase; letter-spacing: .025em; }
 .round-selection-dialog > p { max-width: 400px; margin: 0 auto; color: #53656d; font-size: 11px; line-height: 1.55; }
@@ -561,6 +566,13 @@ button:focus-visible, [role="button"]:focus-visible { outline: 3px solid var(--b
 .round-selection-dialog.is-online .round-choice button.active { background: #702e30; }
 .round-choice strong { font-family: Georgia, serif; font-size: 31px; }
 .round-choice span { font-size: 7px; font-weight: 900; letter-spacing: .12em; text-transform: uppercase; }
+.matchup-choice { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: -7px 0 22px; }
+.matchup-choice button { min-height: 78px; display: grid; align-content: center; gap: 6px; padding: 9px; color: var(--navy-700); background: rgba(255,255,255,.4); border: 1px solid rgba(16,37,54,.2); cursor: pointer; }
+.matchup-choice button:hover { border-color: var(--brass); }
+.matchup-choice button.active { color: var(--ivory); background: var(--navy-800); border-color: var(--brass); box-shadow: inset 0 0 0 2px rgba(215,184,121,.18); }
+.round-selection-dialog.is-online .matchup-choice button.active { background: #702e30; }
+.matchup-choice strong { font-family: Georgia, serif; font-size: 11px; line-height: 1.2; }
+.matchup-choice small { color: inherit; font-size: 7px; line-height: 1.35; opacity: .78; }
 .round-dialog-actions { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 12px; }
 .round-dialog-actions .mode-text-button { margin: 0; padding: 10px 12px; }
 .round-dialog-actions .mode-primary { min-height: 44px; }
@@ -715,9 +727,21 @@ button:focus-visible, [role="button"]:focus-visible { outline: 3px solid var(--b
 .result-actions, .dialog-actions { display: flex; justify-content: center; gap: 9px; }
 .result-actions .ghost-button, .dialog-actions .ghost-button { color: var(--navy-800); border-color: var(--line); }
 .rematch-backdrop { z-index: 150; }
+.turn-notice-backdrop { z-index: 140; }
+.online-setup-backdrop { z-index: 160; }
+
+@media (prefers-reduced-motion: reduce) {
+  .map-route .route-flow { animation: none; }
+}
 .dialog-actions { margin-top: 16px; }
 .handoff-dialog { width: min(520px, 90vw); padding: 36px; text-align: center; color: var(--ink); background: var(--ivory); border: 2px solid var(--brass); border-top: 6px solid var(--blue); box-shadow: 0 25px 70px rgba(0,0,0,.48), inset 0 0 0 5px rgba(9,37,55,.08); }
+.handoff-dialog.turn-notice { border-top-width: 8px; }
 .handoff-dialog.is-red { border-top-color: var(--red); }
+.setup-government-summary { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 18px 0; text-align: left; }
+.setup-government-summary span { display: grid; gap: 4px; padding: 10px; background: rgba(16,37,54,.055); border-top: 3px solid var(--blue); }
+.setup-government-summary span.is-red { border-top-color: var(--red); }
+.setup-government-summary b { font-size: 10px; }
+.setup-government-summary small { color: var(--muted); font-size: 8px; }
 .handoff-dialog h2 { margin: 7px 0 10px; font-family: Georgia, serif; font-size: 25px; text-transform: uppercase; }
 .handoff-dialog p { margin: 0 auto 20px; color: var(--muted); font-size: 11px; line-height: 1.55; }
 .handoff-dialog .confirm-button { min-height: 42px; padding: 0 18px; }

@@ -1,6 +1,6 @@
 import { DurableObject } from 'cloudflare:workers'
 import { createFactionView, createInitialState, endTurn, migrateGameState, playCard } from '../src/engine'
-import type { FactionId, GameCommand, GameState, RoundCount } from '../src/types'
+import type { FactionId, GameCommand, GameState, MatchupId, RoundCount } from '../src/types'
 
 interface Env {
   ASSETS: Fetcher
@@ -14,7 +14,7 @@ interface RoomRecord {
   state: GameState
   tokens: { blue: string; red?: string }
   updatedAt: number
-  rematchProposal?: { requestedBy: FactionId; maxRounds: RoundCount }
+  rematchProposal?: { requestedBy: FactionId; maxRounds: RoundCount; matchup: MatchupId }
 }
 
 interface SocketAttachment {
@@ -24,7 +24,7 @@ interface SocketAttachment {
 
 type RoomCommand =
   | (GameCommand & { revision: number })
-  | { type: 'request-rematch'; maxRounds: RoundCount; revision: number }
+  | { type: 'request-rematch'; maxRounds: RoundCount; matchup: MatchupId; revision: number }
   | { type: 'accept-rematch'; revision: number }
   | { type: 'decline-rematch'; revision: number }
   | { type: 'cancel-rematch'; revision: number }
@@ -50,7 +50,7 @@ export class GameRoom extends DurableObject<Env> {
     super(ctx, env)
     this.ready = ctx.blockConcurrencyWhile(async () => {
       this.room = await ctx.storage.get<RoomRecord>('room') ?? null
-      if (this.room && this.room.state.version !== 6) {
+      if (this.room && this.room.state.version !== 7) {
         this.room.state = migrateGameState(this.room.state)
         await ctx.storage.put('room', this.room)
       }
@@ -111,12 +111,12 @@ export class GameRoom extends DurableObject<Env> {
 
     if (url.pathname === '/create' && request.method === 'POST') {
       if (this.room) return json({ error: 'Raumcode bereits vergeben.' }, 409)
-      const body = await request.json<{ code: string; maxRounds?: RoundCount }>()
+      const body = await request.json<{ code: string; maxRounds?: RoundCount; matchup?: MatchupId }>()
       this.room = {
         code: body.code,
         status: 'waiting',
         revision: 0,
-        state: createInitialState(body.maxRounds),
+        state: createInitialState(body.maxRounds, body.matchup),
         tokens: { blue: crypto.randomUUID() },
         updatedAt: Date.now(),
       }
@@ -176,10 +176,11 @@ export class GameRoom extends DurableObject<Env> {
       if (command.type === 'request-rematch') {
         if (!this.room.tokens.red) throw new Error('Eine neue Partie kann erst mit zwei besetzten Seiten vorgeschlagen werden.')
         if (![6, 12, 18].includes(command.maxRounds)) throw new Error('Ungültige Rundenzahl.')
+        if (!['democracy-democracy', 'democracy-autocracy', 'autocracy-autocracy'].includes(command.matchup)) throw new Error('Ungültige Staatsform-Paarung.')
         if (this.room.rematchProposal && this.room.rematchProposal.requestedBy !== attachment.faction) {
           throw new Error('Die andere Koalition hat bereits eine neue Partie vorgeschlagen.')
         }
-        this.room.rematchProposal = { requestedBy: attachment.faction, maxRounds: command.maxRounds }
+        this.room.rematchProposal = { requestedBy: attachment.faction, maxRounds: command.maxRounds, matchup: command.matchup }
         this.room.revision += 1
         await this.persist()
         this.broadcast()
@@ -212,7 +213,7 @@ export class GameRoom extends DurableObject<Env> {
         if (!this.room.rematchProposal || this.room.rematchProposal.requestedBy === attachment.faction) {
           throw new Error('Es gibt keinen gegnerischen Vorschlag zum Annehmen.')
         }
-        this.room.state = createInitialState(this.room.rematchProposal.maxRounds)
+        this.room.state = createInitialState(this.room.rematchProposal.maxRounds, this.room.rematchProposal.matchup)
         this.room.status = 'playing'
         this.room.rematchProposal = undefined
         this.room.revision += 1
@@ -267,15 +268,17 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url)
     if (url.pathname === '/api/rooms' && request.method === 'POST') {
-      const body = await request.json<{ maxRounds?: RoundCount }>().catch((): { maxRounds?: RoundCount } => ({}))
+      const body = await request.json<{ maxRounds?: RoundCount; matchup?: MatchupId }>().catch((): { maxRounds?: RoundCount; matchup?: MatchupId } => ({}))
       const maxRounds = body.maxRounds ?? 6
+      const matchup = body.matchup ?? 'democracy-democracy'
       if (![6, 12, 18].includes(maxRounds)) return json({ error: 'Ungültige Rundenzahl.' }, 400)
+      if (!['democracy-democracy', 'democracy-autocracy', 'autocracy-autocracy'].includes(matchup)) return json({ error: 'Ungültige Staatsform-Paarung.' }, 400)
       for (let attempt = 0; attempt < 5; attempt += 1) {
         const code = roomCode()
         const response = await roomStub(env, code).fetch(new Request(new URL('/create', request.url), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ code, maxRounds }),
+          body: JSON.stringify({ code, maxRounds, matchup }),
         }))
         if (response.status !== 409) return response
       }
