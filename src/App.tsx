@@ -78,6 +78,7 @@ const MUSIC_VOLUME_KEY = 'sloc-music-volume-v1'
 const MUSIC_MUTED_KEY = 'sloc-music-muted-v1'
 const DEFAULT_MUSIC_VOLUME = 0.32
 const MUSIC_FADE_MS = 650
+const MUSIC_TRACK_STABILITY_MS = 1000
 const MUSIC_TRACKS = {
   title: '/audio/music/title-theme.ogg',
   high: '/audio/music/escalation-high.ogg',
@@ -1393,11 +1394,21 @@ function GameApp({ language, onLanguage }: { language: Language; onLanguage: (la
   const isLocalPvp = mode === 'local-pvp'
   const isPreGameMenu = mode === 'menu'
     || (isOnline && Boolean(onlineSession) && roomSnapshot?.status !== 'playing' && roomSnapshot?.status !== 'complete')
-  const musicTrack = isPreGameMenu || state.escalation <= 3
+  const desiredMusicTrack = isPreGameMenu || state.escalation <= 3
     ? MUSIC_TRACKS.title
     : state.escalation === constants.MAX_ESCALATION
       ? MUSIC_TRACKS.maximum
       : MUSIC_TRACKS.high
+  const [musicTrack, setMusicTrack] = useState(desiredMusicTrack)
+  useEffect(() => {
+    if (desiredMusicTrack === musicTrack) return
+    if (isPreGameMenu) {
+      setMusicTrack(MUSIC_TRACKS.title)
+      return
+    }
+    const timer = window.setTimeout(() => setMusicTrack(desiredMusicTrack), MUSIC_TRACK_STABILITY_MS)
+    return () => window.clearTimeout(timer)
+  }, [desiredMusicTrack, isPreGameMenu, musicTrack])
   const startMusic = useGameMusic(musicTrack, musicMuted ? 0 : musicVolume)
   const musicSettings: MusicSettingsProps = {
     musicVolume,
