@@ -117,6 +117,10 @@ const useGameMusic = (track: string, volume: number) => {
     audio.preload = 'auto'
     audio.volume = 0
     audio.muted = volume === 0
+    audio.hidden = true
+    audio.dataset.gameMusic = 'true'
+    audio.setAttribute('aria-hidden', 'true')
+    document.body.append(audio)
     audioRef.current = audio
     audio.load()
 
@@ -124,6 +128,7 @@ const useGameMusic = (track: string, volume: number) => {
       if (animationFrameRef.current !== undefined) cancelAnimationFrame(animationFrameRef.current)
       audio.pause()
       audio.removeAttribute('src')
+      audio.remove()
       audioRef.current = null
     }
   }, [])
@@ -170,15 +175,15 @@ const useGameMusic = (track: string, volume: number) => {
 
     const removeUnlockListeners = () => {
       if (!unlockListenersAdded) return
-      window.removeEventListener('pointerdown', startAfterInteraction, true)
+      window.removeEventListener('click', startAfterInteraction, true)
       window.removeEventListener('keydown', startAfterInteraction, true)
       unlockListenersAdded = false
     }
 
     const addUnlockListeners = () => {
       if (unlockListenersAdded || disposed) return
-      window.addEventListener('pointerdown', startAfterInteraction, { capture: true, once: true })
-      window.addEventListener('keydown', startAfterInteraction, { capture: true, once: true })
+      window.addEventListener('click', startAfterInteraction, true)
+      window.addEventListener('keydown', startAfterInteraction, true)
       unlockListenersAdded = true
     }
 
@@ -206,6 +211,7 @@ const useGameMusic = (track: string, volume: number) => {
 
     const startAfterInteraction = () => void start()
 
+    addUnlockListeners()
     void start()
 
     return () => {
@@ -214,6 +220,14 @@ const useGameMusic = (track: string, volume: number) => {
       removeUnlockListeners()
     }
   }, [track])
+
+  return () => {
+    const audio = audioRef.current
+    if (!audio) return
+    audio.muted = volumeRef.current === 0
+    audio.volume = volumeRef.current
+    if (audio.paused) void audio.play().catch(() => undefined)
+  }
 }
 
 const loadState = (storageKey = STORAGE_KEY): GameState => {
@@ -689,6 +703,7 @@ interface MusicSettingsProps {
   musicMuted: boolean
   onMusicVolume: (volume: number) => void
   onMusicMuted: (muted: boolean) => void
+  onMusicStart: () => void
 }
 
 const SpeakerIcon = ({ muted }: { muted: boolean }) => (
@@ -700,10 +715,11 @@ const SpeakerIcon = ({ muted }: { muted: boolean }) => (
   </svg>
 )
 
-const MusicVolumeControl = ({ musicVolume, musicMuted, onMusicVolume, onMusicMuted }: MusicSettingsProps) => {
+const MusicVolumeControl = ({ musicVolume, musicMuted, onMusicVolume, onMusicMuted, onMusicStart }: MusicSettingsProps) => {
   const language = useLanguage()
   const displayedVolume = musicMuted ? 0 : Math.round(musicVolume * 100)
   const changeVolume = (value: number) => {
+    onMusicStart()
     const volume = Math.max(0, Math.min(1, value / 100))
     onMusicVolume(volume)
     onMusicMuted(volume === 0)
@@ -717,7 +733,10 @@ const MusicVolumeControl = ({ musicVolume, musicMuted, onMusicVolume, onMusicMut
         className={musicMuted ? 'is-muted' : ''}
         aria-label={musicMuted ? pick(language, 'Musik einschalten', 'Unmute music') : pick(language, 'Musik stummschalten', 'Mute music')}
         aria-pressed={musicMuted}
-        onClick={() => onMusicMuted(!musicMuted)}
+        onClick={() => {
+          onMusicStart()
+          onMusicMuted(!musicMuted)
+        }}
       >
         <SpeakerIcon muted={musicMuted} />
       </button>
@@ -762,7 +781,10 @@ const AudioMenuButton = (settings: MusicSettingsProps) => {
       aria-label={pick(language, 'Audioeinstellungen öffnen', 'Open audio settings')}
       aria-haspopup="dialog"
       aria-expanded={open}
-      onClick={() => setOpen((value) => !value)}
+      onClick={() => {
+        settings.onMusicStart()
+        setOpen((value) => !value)
+      }}
     >
       <SpeakerIcon muted={settings.musicMuted} />
     </button>
@@ -1094,7 +1116,7 @@ interface ModeSelectionProps extends MusicSettingsProps {
   onResumeRoom: (session: OnlineSession) => void
 }
 
-const ModeSelection = ({ language, onLanguage, rounds, onRounds, busy, error, hasSavedSingleGame, hasSavedLocalGame, savedOnlineSession, onSingleplayer, onLocalPvp, onCreateRoom, onJoinRoom, onResumeRoom, musicVolume, musicMuted, onMusicVolume, onMusicMuted }: ModeSelectionProps) => {
+const ModeSelection = ({ language, onLanguage, rounds, onRounds, busy, error, hasSavedSingleGame, hasSavedLocalGame, savedOnlineSession, onSingleplayer, onLocalPvp, onCreateRoom, onJoinRoom, onResumeRoom, musicVolume, musicMuted, onMusicVolume, onMusicMuted, onMusicStart }: ModeSelectionProps) => {
   const queryRoom = new URLSearchParams(window.location.search).get('room') ?? ''
   const [joinCode, setJoinCode] = useState(queryRoom.toUpperCase())
   const [launchMode, setLaunchMode] = useState<'singleplayer' | 'local-pvp' | 'online'>()
@@ -1118,7 +1140,7 @@ const ModeSelection = ({ language, onLanguage, rounds, onRounds, busy, error, ha
             <span aria-hidden="true">🇬🇧</span><small>EN</small>
           </button>
         </div>
-        <AudioMenuButton musicVolume={musicVolume} musicMuted={musicMuted} onMusicVolume={onMusicVolume} onMusicMuted={onMusicMuted} />
+        <AudioMenuButton musicVolume={musicVolume} musicMuted={musicMuted} onMusicVolume={onMusicVolume} onMusicMuted={onMusicMuted} onMusicStart={onMusicStart} />
       </div>
       <header className="mode-brand">
         <span className="mode-brand-mark">✦</span>
@@ -1395,12 +1417,13 @@ function GameApp({ language, onLanguage }: { language: Language; onLanguage: (la
     : state.escalation === constants.MAX_ESCALATION
       ? MUSIC_TRACKS.maximum
       : MUSIC_TRACKS.high
-  useGameMusic(musicTrack, musicMuted ? 0 : musicVolume)
+  const startMusic = useGameMusic(musicTrack, musicMuted ? 0 : musicVolume)
   const musicSettings: MusicSettingsProps = {
     musicVolume,
     musicMuted,
     onMusicVolume: setMusicVolume,
     onMusicMuted: setMusicMuted,
+    onMusicStart: startMusic,
   }
   const viewerFaction: FactionId = isOnline && onlineSession ? onlineSession.faction : isLocalPvp ? state.activeFaction : 'blue'
   const visibleState = useMemo(
