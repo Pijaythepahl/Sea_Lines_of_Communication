@@ -74,6 +74,107 @@ const V2_STORAGE_KEY = 'sloc-game-v2'
 const LEGACY_STORAGE_KEY = 'sloc-mvp1-game-v1'
 const ONLINE_SESSION_KEY = 'sloc-online-session-v1'
 const LANGUAGE_KEY = 'sloc-language-v1'
+const MENU_MUSIC_VOLUME = 0.32
+const MENU_MUSIC_FADE_MS = 650
+
+const useMenuMusic = (active: boolean) => {
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const animationFrameRef = useRef<number | undefined>(undefined)
+
+  useEffect(() => {
+    const audio = document.createElement('audio')
+    const oggSource = document.createElement('source')
+    const wavSource = document.createElement('source')
+
+    oggSource.src = '/audio/music/title-theme.ogg'
+    oggSource.type = 'audio/ogg'
+    wavSource.src = '/audio/music/title-theme.wav'
+    wavSource.type = 'audio/wav'
+    audio.append(oggSource, wavSource)
+    audio.loop = true
+    audio.preload = 'auto'
+    audio.volume = 0
+    audioRef.current = audio
+    audio.load()
+
+    return () => {
+      if (animationFrameRef.current !== undefined) cancelAnimationFrame(animationFrameRef.current)
+      audio.pause()
+      audio.replaceChildren()
+      audioRef.current = null
+    }
+  }, [])
+
+  useEffect(() => {
+    const audio = audioRef.current
+    if (!audio) return
+    let disposed = false
+
+    const cancelFade = () => {
+      if (animationFrameRef.current === undefined) return
+      cancelAnimationFrame(animationFrameRef.current)
+      animationFrameRef.current = undefined
+    }
+
+    const fadeTo = (target: number, onComplete?: () => void) => {
+      cancelFade()
+      const initialVolume = audio.volume
+      const startedAt = performance.now()
+
+      const step = (now: number) => {
+        if (disposed) return
+        const progress = Math.min((now - startedAt) / MENU_MUSIC_FADE_MS, 1)
+        audio.volume = initialVolume + (target - initialVolume) * progress
+        if (progress < 1) {
+          animationFrameRef.current = requestAnimationFrame(step)
+          return
+        }
+        animationFrameRef.current = undefined
+        onComplete?.()
+      }
+
+      animationFrameRef.current = requestAnimationFrame(step)
+    }
+
+    const start = async () => {
+      if (disposed || !active) return
+      try {
+        if (audio.paused) {
+          audio.volume = 0
+          await audio.play()
+        }
+        if (disposed || !active) {
+          audio.pause()
+          audio.currentTime = 0
+          return
+        }
+        fadeTo(MENU_MUSIC_VOLUME)
+      } catch {
+        // Autoplay is retried after the first pointer or keyboard interaction.
+      }
+    }
+
+    const startAfterInteraction = () => void start()
+
+    if (active) {
+      void start()
+      window.addEventListener('pointerdown', startAfterInteraction, { capture: true, once: true })
+      window.addEventListener('keydown', startAfterInteraction, { capture: true, once: true })
+    } else {
+      fadeTo(0, () => {
+        audio.pause()
+        audio.currentTime = 0
+      })
+    }
+
+    return () => {
+      disposed = true
+      cancelFade()
+      window.removeEventListener('pointerdown', startAfterInteraction, true)
+      window.removeEventListener('keydown', startAfterInteraction, true)
+    }
+  }, [active])
+}
 
 const loadState = (storageKey = STORAGE_KEY): GameState => {
   try {
@@ -1128,6 +1229,9 @@ function GameApp({ language, onLanguage }: { language: Language; onLanguage: (la
 
   const isOnline = mode === 'multiplayer'
   const isLocalPvp = mode === 'local-pvp'
+  const menuMusicActive = mode === 'menu'
+    || (isOnline && Boolean(onlineSession) && roomSnapshot?.status !== 'playing' && roomSnapshot?.status !== 'complete')
+  useMenuMusic(menuMusicActive)
   const viewerFaction: FactionId = isOnline && onlineSession ? onlineSession.faction : isLocalPvp ? state.activeFaction : 'blue'
   const visibleState = useMemo(
     () => isOnline ? state : createFactionView(state, viewerFaction),
