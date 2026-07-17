@@ -83,14 +83,8 @@ const useMenuMusic = (active: boolean) => {
 
   useEffect(() => {
     const audio = document.createElement('audio')
-    const oggSource = document.createElement('source')
-    const wavSource = document.createElement('source')
 
-    oggSource.src = '/audio/music/title-theme.ogg'
-    oggSource.type = 'audio/ogg'
-    wavSource.src = '/audio/music/title-theme.wav'
-    wavSource.type = 'audio/wav'
-    audio.append(oggSource, wavSource)
+    audio.src = '/audio/music/title-theme.ogg'
     audio.loop = true
     audio.preload = 'auto'
     audio.volume = 0
@@ -100,7 +94,7 @@ const useMenuMusic = (active: boolean) => {
     return () => {
       if (animationFrameRef.current !== undefined) cancelAnimationFrame(animationFrameRef.current)
       audio.pause()
-      audio.replaceChildren()
+      audio.removeAttribute('src')
       audioRef.current = null
     }
   }, [])
