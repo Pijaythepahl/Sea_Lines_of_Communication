@@ -145,7 +145,6 @@ const useGameMusic = (track: string, volume: number) => {
     const audio = audioRef.current
     if (!audio) return
     let disposed = false
-    let unlockListenersAdded = false
 
     const cancelFade = () => {
       if (animationFrameRef.current === undefined) return
@@ -173,20 +172,6 @@ const useGameMusic = (track: string, volume: number) => {
       animationFrameRef.current = requestAnimationFrame(step)
     })
 
-    const removeUnlockListeners = () => {
-      if (!unlockListenersAdded) return
-      window.removeEventListener('click', startAfterInteraction, true)
-      window.removeEventListener('keydown', startAfterInteraction, true)
-      unlockListenersAdded = false
-    }
-
-    const addUnlockListeners = () => {
-      if (unlockListenersAdded || disposed) return
-      window.addEventListener('click', startAfterInteraction, true)
-      window.addEventListener('keydown', startAfterInteraction, true)
-      unlockListenersAdded = true
-    }
-
     const start = async () => {
       if (disposed) return
       try {
@@ -202,22 +187,18 @@ const useGameMusic = (track: string, volume: number) => {
         }
         if (audio.paused) await audio.play()
         if (disposed) return
-        removeUnlockListeners()
         await fadeTo(volumeRef.current)
       } catch {
-        addUnlockListeners()
+        // Browser autoplay may be blocked until a React UI event calls the
+        // synchronous start function returned by this hook.
       }
     }
 
-    const startAfterInteraction = () => void start()
-
-    addUnlockListeners()
     void start()
 
     return () => {
       disposed = true
       cancelFade()
-      removeUnlockListeners()
     }
   }, [track])
 
@@ -1129,7 +1110,7 @@ const ModeSelection = ({ language, onLanguage, rounds, onRounds, busy, error, ha
   }
 
   return (
-    <main className="mode-screen">
+    <main className="mode-screen" onClickCapture={onMusicStart} onKeyDownCapture={onMusicStart}>
       <div className="mode-backdrop" aria-hidden="true"><i /><i /><i /></div>
       <div className="mode-utility-controls">
         <div className="language-switcher" role="group" aria-label={pick(language, 'Sprache wählen', 'Choose language')}>
@@ -1252,7 +1233,7 @@ const OnlineLobby = ({ session, snapshot, connection, onLeave, ...musicSettings 
     window.setTimeout(() => setCopied(false), 1800)
   }
   return (
-    <main className="mode-screen lobby-screen">
+    <main className="mode-screen lobby-screen" onClickCapture={musicSettings.onMusicStart} onKeyDownCapture={musicSettings.onMusicStart}>
       <div className="mode-utility-controls"><AudioMenuButton {...musicSettings} /></div>
       <header className="mode-brand compact"><span className="mode-brand-mark">✦</span><div><span>SEA LINES OF</span><strong>COMMUNICATION</strong></div></header>
       <section className="lobby-card">
@@ -1692,7 +1673,7 @@ function GameApp({ language, onLanguage }: { language: Language; onLanguage: (la
   const escalationBand = getEscalationBand(state.escalation)
 
   return (
-    <div className={`app-shell ${factionClass(state.activeFaction)}`}>
+    <div className={`app-shell ${factionClass(state.activeFaction)}`} onClickCapture={startMusic} onKeyDownCapture={startMusic}>
       <header className="topbar">
         <div className="brand-mark" aria-hidden="true"><span>✦</span></div>
         <div className="brand-copy"><span>SEA LINES OF</span><strong>COMMUNICATION</strong><small>{isOnline ? `ONLINE · ${pick(language, 'DU', 'YOU')}: ${factionText(viewerFaction, language).adjective}` : isLocalPvp ? pick(language, 'LOKALES PVP · PASS-AND-PLAY', 'LOCAL PVP · PASS-AND-PLAY') : pick(language, 'EINZELSPIELER · DU: BLAU', 'SINGLE PLAYER · YOU: BLUE')}</small></div>
