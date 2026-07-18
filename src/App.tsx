@@ -333,6 +333,11 @@ const getFactionMapTotals = (state: GameState, faction: FactionId) => REGION_ORD
   { presence: 0, awareness: 0, access: 0, logistics: 0 },
 )
 
+const STANDARD_MAP_TRANSFORM = 'translate(-45 0) scale(1.1 1)'
+const CINEMATIC_MAP_TRANSFORM = 'translate(-52.5 -20) scale(1.45 .75)'
+const getMapX = (x: number, cinematic: boolean) => cinematic ? 600 + (x - 450) * 1.45 : 450 + (x - 450) * 1.1
+const getMapY = (y: number, cinematic: boolean) => cinematic ? y * .75 - 20 : y
+
 interface MapBoardProps {
   state: GameState
   inspected: RegionId
@@ -358,6 +363,19 @@ const MapBoard = ({
   const chokepoint = evaluateChokepoint(state)
   const active = state.activeFaction
   const activeTotals = getFactionMapTotals(state, active)
+  const mapStageRef = useRef<HTMLDivElement>(null)
+  const [cinematicMap, setCinematicMap] = useState(false)
+  useEffect(() => {
+    const stage = mapStageRef.current
+    if (!stage) return
+    const updateProjection = () => setCinematicMap(stage.clientWidth / Math.max(stage.clientHeight, 1) >= 2.2)
+    updateProjection()
+    const observer = new ResizeObserver(updateProjection)
+    observer.observe(stage)
+    return () => observer.disconnect()
+  }, [])
+  const mapTransform = cinematicMap ? CINEMATIC_MAP_TRANSFORM : STANDARD_MAP_TRANSFORM
+  const mapViewBox = cinematicMap ? '0 0 1200 420' : '0 0 900 530'
   const scoringRoutes = new Set<RouteId>()
   for (const faction of ['blue', 'red'] as const) {
     const forecastAp = faction === active ? state.actionPoints : state.endedActionPoints[faction]
@@ -389,9 +407,6 @@ const MapBoard = ({
             <span><i className="legend-dot contested" /> {pick(language, 'umkämpft', 'contested')}</span>
             <span><i className="legend-dot denied" /> {pick(language, 'verwehrt', 'denied')}</span>
           </div>
-          <div className="map-resource-key" aria-label={pick(language, 'Ressourcenlegende', 'Resource legend')}>
-            {RESOURCE_ORDER.map((resource) => <span key={resource}><ResourceIcon resource={resource} />{resourceText(resource, language).name}</span>)}
-          </div>
         </div>
       </div>
       <div className={`strategic-overview ${factionClass(active)}`}>
@@ -413,8 +428,8 @@ const MapBoard = ({
           <strong>{chokepoint ? factionText(chokepoint, language).adjective : pick(language, 'offen', 'open')}</strong>
         </div>
       </div>
-      <div className="map-stage">
-        <svg className="strategy-map" viewBox="0 0 900 530" role="img" aria-label={pick(language, 'Fiktive maritime Karte mit neun Regionen und vier Sea Lines of Communication', 'Fictional maritime map with nine regions and four Sea Lines of Communication')}>
+      <div className="map-stage" ref={mapStageRef}>
+        <svg className={`strategy-map ${cinematicMap ? 'is-cinematic' : 'is-standard'}`} viewBox={mapViewBox} role="img" aria-label={pick(language, 'Fiktive maritime Karte mit neun Regionen und vier Sea Lines of Communication', 'Fictional maritime map with nine regions and four Sea Lines of Communication')}>
           <defs>
             <linearGradient id="sea" x1="0" y1="0" x2="1" y2="1">
               <stop offset="0" stopColor="#e9e4d6" />
@@ -442,12 +457,12 @@ const MapBoard = ({
               <feDropShadow dx="0" dy="2" stdDeviation="4" floodColor="#203b47" floodOpacity=".24" />
             </filter>
           </defs>
-          <rect width="900" height="530" fill="url(#sea)" />
-          <rect width="900" height="530" fill="url(#chartGrid)" />
-          <path className="bathymetry" d="M-20 70 C160 135 224 50 383 95 S690 137 930 48" />
-          <path className="bathymetry" d="M-10 392 C151 332 278 360 389 414 S693 490 920 401" />
-          <path className="bathymetry thin" d="M54 0 C110 173 75 330 153 540 M770 -10 C712 161 758 349 690 540" />
-          <g className="map-land" filter="url(#landShadow)">
+          <rect width={cinematicMap ? 1200 : 900} height={cinematicMap ? 420 : 530} fill="url(#sea)" />
+          <rect width={cinematicMap ? 1200 : 900} height={cinematicMap ? 420 : 530} fill="url(#chartGrid)" />
+          <path className="bathymetry" transform={mapTransform} d="M-20 70 C160 135 224 50 383 95 S690 137 930 48" />
+          <path className="bathymetry" transform={mapTransform} d="M-10 392 C151 332 278 360 389 414 S693 490 920 401" />
+          <path className="bathymetry thin" transform={mapTransform} d="M54 0 C110 173 75 330 153 540 M770 -10 C712 161 758 349 690 540" />
+          <g className="map-land" filter="url(#landShadow)" transform={mapTransform}>
             <path className="landmass coast-edge" d="M0 0 H154 C160 31 139 58 112 75 C83 94 69 126 43 143 C29 152 14 158 0 160 Z" />
             <path className="landmass coast-edge" d="M900 0 H746 C740 31 761 58 788 75 C817 94 831 126 857 143 C871 152 886 158 900 160 Z" />
             <path className="landmass continent" d="M168 164 C205 136 276 137 327 166 C374 193 387 231 363 267 C344 295 368 317 353 349 C333 391 287 407 248 386 C211 366 202 332 174 307 C142 278 139 208 168 164 Z" />
@@ -467,6 +482,7 @@ const MapBoard = ({
               <path
                 key={`area-${regionId}`}
                 d={region.mapPath}
+                transform={mapTransform}
                 className={`sea-region ${usability} ${isValid ? 'valid-target' : ''} ${isSelected ? 'selected-target' : ''}`}
                 onClick={() => onRegionClick(regionId)}
               />
@@ -483,7 +499,7 @@ const MapBoard = ({
               : Math.max(0, Math.min(1, operationalYield / state.routeCapacity[routeId]))
             const flowDuration = 5.2 - flowRatio * 3.4
             return (
-              <g key={routeId} className={`map-route ${factionClass(route.faction)} ${route.kind} ${scoringRoutes.has(routeId) ? 'earning-route' : 'reserve-route'} ${result.blocked ? 'blocked' : ''} ${flowRatio > 0 ? 'flowing' : 'flow-stopped'} ${valid ? 'valid-route' : ''} ${selectedRoute === routeId ? 'selected-route' : ''}`}>
+              <g key={routeId} transform={mapTransform} className={`map-route ${factionClass(route.faction)} ${route.kind} ${scoringRoutes.has(routeId) ? 'earning-route' : 'reserve-route'} ${result.blocked ? 'blocked' : ''} ${flowRatio > 0 ? 'flowing' : 'flow-stopped'} ${valid ? 'valid-route' : ''} ${selectedRoute === routeId ? 'selected-route' : ''}`}>
                 <path className="route-hitbox" d={route.svgPath} onClick={() => onRouteClick(routeId)} />
                 <path className="route-line" d={route.svgPath} />
                 <path className="route-flow" d={route.svgPath} pathLength="100" style={{ animationDuration: `${flowDuration}s` }} />
@@ -500,7 +516,7 @@ const MapBoard = ({
               <g
                 key={regionId}
                 className={`region-node ${usability} ${selected ? 'inspected' : ''} ${valid ? 'valid-target' : ''}`}
-                transform={`translate(${region.x} ${region.y})`}
+                transform={`translate(${getMapX(region.x, cinematicMap)} ${getMapY(region.y, cinematicMap)})`}
                 onClick={() => onRegionClick(regionId)}
                 role="button"
                 aria-label={`${region.name}, ${usabilityText(usability, language).label} ${pick(language, 'für', 'for')} ${factionText(state.activeFaction, language).adjective}`}
@@ -520,7 +536,7 @@ const MapBoard = ({
             )
           })}
 
-          <g className="compass" transform="translate(62 458)">
+          <g className="compass" transform={cinematicMap ? 'translate(72 350)' : 'translate(62 458)'}>
             <circle r="30" />
             <path d="M0-26 L6-5 L0 0 L-6-5 Z M0 26 L6 5 L0 0 L-6 5 Z M-26 0 L-5-6 L0 0 L-5 6 Z M26 0 L5-6 L0 0 L5 6 Z" />
             <text y="-34">N</text>
