@@ -519,7 +519,11 @@ const MapBoard = ({
                 <circle className="node-ring" r={region.chokepoint ? 29 : 25} />
                 <circle className="node-core" r={region.chokepoint ? 22 : 19} />
                 <text className="node-symbol" y="5">{region.chokepoint ? '◇' : region.market ? '¤' : '✦'}</text>
-                <text className="node-title" x={0} y={meridianDetails ? -37 : region.y <= 60 ? -29 : -34}>{region.shortName}</text>
+                <text
+                  className={`node-title ${meridianDetails ? 'is-left' : ''}`}
+                  x={meridianDetails ? -38 : 0}
+                  y={meridianDetails ? 4 : region.y <= 60 ? -29 : -34}
+                >{region.shortName}</text>
                 <text className="node-status" y={region.chokepoint ? 45 : 41}>{usabilityText(usability, language).short}</text>
                 <g transform={meridianDetails ? 'translate(34 -17)' : `translate(${resourceX} ${blueResourceY})`}>
                   <MapResourceRow state={state} regionId={regionId} faction="blue" />

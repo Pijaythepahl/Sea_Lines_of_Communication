@@ -297,6 +297,7 @@ button:focus-visible, [role="button"]:focus-visible { outline: 3px solid var(--b
 .node-symbol { fill: var(--brass-light); text-anchor: middle; font-family: Georgia, serif; font-size: 18px; font-weight: 800; }
 .node-title { fill: var(--ink); text-anchor: middle; font-family: Georgia, serif; font-size: 11px; font-weight: 800; text-transform: uppercase; paint-order: stroke; stroke: rgba(244,240,228,.95); stroke-width: 3px; stroke-linejoin: round; }
 .node-title.is-side { text-anchor: start; }
+.node-title.is-left { text-anchor: end; }
 .node-status { fill: var(--muted); text-anchor: middle; font-size: 7px; font-weight: 900; letter-spacing: .12em; paint-order: stroke; stroke: var(--paper); stroke-width: 2px; }
 .region-node.free .node-status { fill: var(--free); }
 .region-node.contested .node-status { fill: var(--contested); }
