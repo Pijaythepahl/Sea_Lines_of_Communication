@@ -566,13 +566,24 @@ button:focus-visible, [role="button"]:focus-visible { outline: 3px solid var(--b
 .round-selection-dialog.is-online .round-choice button.active { background: #702e30; }
 .round-choice strong { font-family: Georgia, serif; font-size: 31px; }
 .round-choice span { font-size: 7px; font-weight: 900; letter-spacing: .12em; text-transform: uppercase; }
-.matchup-choice { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: -7px 0 22px; }
-.matchup-choice button { min-height: 78px; display: grid; align-content: center; gap: 6px; padding: 9px; color: var(--navy-700); background: rgba(255,255,255,.4); border: 1px solid rgba(16,37,54,.2); cursor: pointer; }
-.matchup-choice button:hover { border-color: var(--brass); }
-.matchup-choice button.active { color: var(--ivory); background: var(--navy-800); border-color: var(--brass); box-shadow: inset 0 0 0 2px rgba(215,184,121,.18); }
-.round-selection-dialog.is-online .matchup-choice button.active { background: #702e30; }
-.matchup-choice strong { font-family: Georgia, serif; font-size: 11px; line-height: 1.2; }
-.matchup-choice small { color: inherit; font-size: 7px; line-height: 1.35; opacity: .78; }
+.government-setup { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: -7px 0 22px; text-align: left; }
+.government-setup.single-side { grid-template-columns: minmax(0, 360px); justify-content: center; margin-top: 18px; }
+.government-setup.compact { margin-bottom: 8px; }
+.government-side { padding: 12px; background: rgba(255,255,255,.35); border: 1px solid rgba(16,37,54,.2); border-top: 4px solid var(--blue); }
+.government-side.is-red { border-top-color: var(--red); }
+.government-side-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 8px; text-transform: uppercase; }
+.government-side-heading span { font-family: Georgia, serif; font-size: 14px; font-weight: 800; }
+.government-side-heading small { color: var(--muted); font-size: 7px; letter-spacing: .06em; }
+.government-options { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.government-options button, .government-pending { min-height: 76px; display: grid; align-content: center; gap: 5px; padding: 9px; color: var(--navy-700); background: rgba(255,255,255,.48); border: 1px solid rgba(16,37,54,.2); text-align: center; }
+.government-options button { cursor: pointer; }
+.government-options button:hover { border-color: var(--brass); }
+.government-options button.active { color: var(--ivory); background: var(--navy-800); border-color: var(--brass); box-shadow: inset 0 0 0 2px rgba(215,184,121,.18); }
+.government-side.is-red .government-options button.active { background: #702e30; }
+.government-options strong, .government-pending strong { font-family: Georgia, serif; font-size: 11px; line-height: 1.2; }
+.government-options small, .government-pending small { color: inherit; font-size: 7px; line-height: 1.35; opacity: .78; }
+.government-side.is-pending { background: rgba(167,55,54,.05); }
+.government-pending { color: var(--red); border-style: dashed; }
 .round-dialog-actions { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 12px; }
 .round-dialog-actions .mode-text-button { margin: 0; padding: 10px 12px; }
 .round-dialog-actions .mode-primary { min-height: 44px; }

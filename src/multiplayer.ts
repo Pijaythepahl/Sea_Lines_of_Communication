@@ -1,4 +1,4 @@
-import type { FactionId, GameCommand, GameState, MatchupId, RoundCount } from './types'
+import type { FactionId, GameCommand, GameState, GovernmentType, RoundCount } from './types'
 
 export type RoomStatus = 'waiting' | 'playing' | 'complete'
 export type ConnectionStatus = 'connecting' | 'connected' | 'reconnecting' | 'offline'
@@ -12,7 +12,7 @@ export interface OnlineSession {
 export interface RematchProposal {
   requestedBy: FactionId
   maxRounds: RoundCount
-  matchup: MatchupId
+  government: GovernmentType
 }
 
 export interface RoomSnapshot {
@@ -28,8 +28,8 @@ export interface RoomSnapshot {
 
 export type RoomCommand =
   | (GameCommand & { revision: number })
-  | { type: 'request-rematch'; maxRounds: RoundCount; matchup: MatchupId; revision: number }
-  | { type: 'accept-rematch'; revision: number }
+  | { type: 'request-rematch'; maxRounds: RoundCount; government: GovernmentType; revision: number }
+  | { type: 'accept-rematch'; government: GovernmentType; revision: number }
   | { type: 'decline-rematch'; revision: number }
   | { type: 'cancel-rematch'; revision: number }
 
@@ -46,15 +46,19 @@ const parseResponse = async (response: Response): Promise<SessionResponse> => {
   return body
 }
 
-export const createOnlineRoom = async (maxRounds: RoundCount, matchup: MatchupId): Promise<SessionResponse> =>
+export const createOnlineRoom = async (maxRounds: RoundCount, blueGovernment: GovernmentType): Promise<SessionResponse> =>
   parseResponse(await fetch('/api/rooms', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ maxRounds, matchup }),
+    body: JSON.stringify({ maxRounds, blueGovernment }),
   }))
 
-export const joinOnlineRoom = async (roomCode: string): Promise<SessionResponse> =>
-  parseResponse(await fetch(`/api/rooms/${encodeURIComponent(roomCode.trim().toUpperCase())}/join`, { method: 'POST' }))
+export const joinOnlineRoom = async (roomCode: string, redGovernment: GovernmentType): Promise<SessionResponse> =>
+  parseResponse(await fetch(`/api/rooms/${encodeURIComponent(roomCode.trim().toUpperCase())}/join`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ government: redGovernment }),
+  }))
 
 export const socketUrl = (session: OnlineSession): string => {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'

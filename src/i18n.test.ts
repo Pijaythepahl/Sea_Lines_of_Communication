@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cardText, formatLogEntry, formatWinnerReason, governmentText, matchupText, regionText } from './i18n'
+import { cardText, formatLogEntry, formatWinnerReason, governmentPairingText, governmentText, regionText } from './i18n'
 
 describe('Lokalisierung', () => {
   it('übersetzt Karten und Kartenorte ohne den Spielzustand zu verändern', () => {
@@ -25,6 +25,6 @@ describe('Lokalisierung', () => {
   it('beschreibt Staatsformen und Paarungen in beiden Sprachen', () => {
     expect(governmentText('democracy', 'de').benefit).toContain('0–2')
     expect(governmentText('autocracy', 'en').name).toBe('Autocracy')
-    expect(matchupText('democracy-autocracy', 'en')).toBe('Democracy vs Autocracy')
+    expect(governmentPairingText({ blue: 'autocracy', red: 'democracy' }, 'en')).toBe('Autocracy vs Democracy')
   })
 })

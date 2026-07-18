@@ -61,14 +61,19 @@ const opened = (socket) => socket.readyState === WebSocket.OPEN
 const created = await request('/api/rooms', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ maxRounds: 12, matchup: 'democracy-autocracy' }),
+  body: JSON.stringify({ maxRounds: 12, blueGovernment: 'autocracy' }),
 })
 if (created.snapshot.status !== 'waiting' || created.session.faction !== 'blue') throw new Error('Room creation contract failed')
-if (created.snapshot.state.maxRounds !== 12 || created.snapshot.state.version !== 7) throw new Error('Room configuration contract failed')
-if (created.snapshot.state.matchup !== 'democracy-autocracy' || created.snapshot.state.governments.red !== 'autocracy') throw new Error('Government matchup did not synchronize')
+if (created.snapshot.state.maxRounds !== 12 || created.snapshot.state.version !== 8) throw new Error('Room configuration contract failed')
+if (created.snapshot.state.governments.blue !== 'autocracy') throw new Error('Host government did not synchronize')
 
-const joined = await request(`/api/rooms/${created.session.roomCode}/join`, { method: 'POST' })
+const joined = await request(`/api/rooms/${created.session.roomCode}/join`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ government: 'democracy' }),
+})
 if (joined.snapshot.status !== 'playing' || joined.session.faction !== 'red') throw new Error('Room join contract failed')
+if (joined.snapshot.state.governments.blue !== 'autocracy' || joined.snapshot.state.governments.red !== 'democracy') throw new Error('Independent government choices did not synchronize')
 
 const blueSocket = socketFor(created.session)
 const redSocket = socketFor(joined.session)
@@ -91,9 +96,9 @@ if (blueUpdate.state.activeFaction !== 'red' || redUpdate.state.activeFaction !=
 
 const blueProposalPromise = nextJsonWhere(blueSocket, (message) => message.type === 'snapshot' && message.revision > blueUpdate.revision)
 const redProposalPromise = nextJsonWhere(redSocket, (message) => message.type === 'snapshot' && message.revision > redUpdate.revision)
-blueSocket.send(JSON.stringify({ type: 'request-rematch', maxRounds: 18, matchup: 'autocracy-autocracy', revision: blueUpdate.revision }))
+blueSocket.send(JSON.stringify({ type: 'request-rematch', maxRounds: 18, government: 'democracy', revision: blueUpdate.revision }))
 const [blueProposal, redProposal] = await Promise.all([blueProposalPromise, redProposalPromise])
-if (blueProposal.rematchProposal?.requestedBy !== 'blue' || redProposal.rematchProposal?.maxRounds !== 18 || redProposal.rematchProposal?.matchup !== 'autocracy-autocracy') throw new Error('Rematch proposal did not synchronize')
+if (blueProposal.rematchProposal?.requestedBy !== 'blue' || redProposal.rematchProposal?.maxRounds !== 18 || redProposal.rematchProposal?.government !== 'democracy') throw new Error('Rematch proposal did not synchronize')
 
 const blueDeclinePromise = nextJsonWhere(blueSocket, (message) => message.type === 'snapshot' && message.revision > blueProposal.revision)
 const redDeclinePromise = nextJsonWhere(redSocket, (message) => message.type === 'snapshot' && message.revision > redProposal.revision)
@@ -103,15 +108,16 @@ if (blueDecline.rematchProposal || redDecline.rematchProposal) throw new Error('
 
 const blueSecondProposalPromise = nextJsonWhere(blueSocket, (message) => message.type === 'snapshot' && message.revision > blueDecline.revision)
 const redSecondProposalPromise = nextJsonWhere(redSocket, (message) => message.type === 'snapshot' && message.revision > redDecline.revision)
-blueSocket.send(JSON.stringify({ type: 'request-rematch', maxRounds: 6, matchup: 'democracy-democracy', revision: blueDecline.revision }))
+blueSocket.send(JSON.stringify({ type: 'request-rematch', maxRounds: 6, government: 'autocracy', revision: blueDecline.revision }))
 const [blueSecondProposal, redSecondProposal] = await Promise.all([blueSecondProposalPromise, redSecondProposalPromise])
 
 const blueRematchPromise = nextJsonWhere(blueSocket, (message) => message.type === 'snapshot' && message.revision > blueSecondProposal.revision)
 const redRematchPromise = nextJsonWhere(redSocket, (message) => message.type === 'snapshot' && message.revision > redSecondProposal.revision)
-redSocket.send(JSON.stringify({ type: 'accept-rematch', revision: redSecondProposal.revision }))
+redSocket.send(JSON.stringify({ type: 'accept-rematch', government: 'democracy', revision: redSecondProposal.revision }))
 const [blueRematch, redRematch] = await Promise.all([blueRematchPromise, redRematchPromise])
 if (blueRematch.roomCode !== created.session.roomCode || redRematch.roomCode !== joined.session.roomCode) throw new Error('Room code changed during rematch')
-if (blueRematch.status !== 'playing' || blueRematch.state.maxRounds !== 6 || blueRematch.state.round !== 1 || blueRematch.state.matchup !== 'democracy-democracy') throw new Error('Accepted rematch did not reset the game')
+if (blueRematch.status !== 'playing' || blueRematch.state.maxRounds !== 6 || blueRematch.state.round !== 1) throw new Error('Accepted rematch did not reset the game')
+if (blueRematch.state.governments.blue !== 'autocracy' || redRematch.state.governments.red !== 'democracy') throw new Error('Rematch government choices did not synchronize')
 if (blueRematch.state.hands.red.length !== 0 || redRematch.state.hands.blue.length !== 0) throw new Error('Rematch exposed opponent hands')
 
 const blueClosed = new Promise((resolve) => blueSocket.addEventListener('close', resolve, { once: true }))

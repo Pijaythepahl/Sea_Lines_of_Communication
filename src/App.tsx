@@ -34,7 +34,6 @@ import {
   formatWinnerReason,
   governmentText,
   leadershipLabel,
-  matchupText,
   pick,
   regionText,
   resourceText,
@@ -58,7 +57,8 @@ import type {
   CardPlay,
   FactionId,
   GameState,
-  MatchupId,
+  GovernmentSelection,
+  GovernmentType,
   RegionId,
   ResourceKey,
   RouteId,
@@ -66,8 +66,10 @@ import type {
   SuspendableResource,
 } from './types'
 
-const STORAGE_KEY = 'sloc-game-v7'
-const LOCAL_PVP_STORAGE_KEY = 'sloc-local-pvp-v7'
+const STORAGE_KEY = 'sloc-game-v8'
+const LOCAL_PVP_STORAGE_KEY = 'sloc-local-pvp-v8'
+const V7_STORAGE_KEY = 'sloc-game-v7'
+const V7_LOCAL_PVP_STORAGE_KEY = 'sloc-local-pvp-v7'
 const V6_STORAGE_KEY = 'sloc-game-v6'
 const V6_LOCAL_PVP_STORAGE_KEY = 'sloc-local-pvp-v6'
 const V5_STORAGE_KEY = 'sloc-game-v5'
@@ -221,8 +223,8 @@ const loadState = (storageKey = STORAGE_KEY): GameState => {
   try {
     const raw = localStorage.getItem(storageKey)
       ?? (storageKey === STORAGE_KEY
-        ? localStorage.getItem(V6_STORAGE_KEY) ?? localStorage.getItem(V5_STORAGE_KEY) ?? localStorage.getItem(V4_STORAGE_KEY) ?? localStorage.getItem(V3_STORAGE_KEY) ?? localStorage.getItem(V2_STORAGE_KEY) ?? localStorage.getItem(LEGACY_STORAGE_KEY)
-        : storageKey === LOCAL_PVP_STORAGE_KEY ? localStorage.getItem(V6_LOCAL_PVP_STORAGE_KEY) ?? localStorage.getItem(V5_LOCAL_PVP_STORAGE_KEY) ?? localStorage.getItem(V4_LOCAL_PVP_STORAGE_KEY) : null)
+        ? localStorage.getItem(V7_STORAGE_KEY) ?? localStorage.getItem(V6_STORAGE_KEY) ?? localStorage.getItem(V5_STORAGE_KEY) ?? localStorage.getItem(V4_STORAGE_KEY) ?? localStorage.getItem(V3_STORAGE_KEY) ?? localStorage.getItem(V2_STORAGE_KEY) ?? localStorage.getItem(LEGACY_STORAGE_KEY)
+        : storageKey === LOCAL_PVP_STORAGE_KEY ? localStorage.getItem(V7_LOCAL_PVP_STORAGE_KEY) ?? localStorage.getItem(V6_LOCAL_PVP_STORAGE_KEY) ?? localStorage.getItem(V5_LOCAL_PVP_STORAGE_KEY) ?? localStorage.getItem(V4_LOCAL_PVP_STORAGE_KEY) : null)
     if (!raw) return createInitialState()
     const parsed = JSON.parse(raw) as GameState
     if (!parsed.regions?.central_basin || !parsed.hands?.blue) return createInitialState()
@@ -234,18 +236,30 @@ const loadState = (storageKey = STORAGE_KEY): GameState => {
 
 const factionClass = (faction: FactionId) => (faction === 'blue' ? 'is-blue' : 'is-red')
 
-const MatchupSelector = ({ value, onChange }: { value: MatchupId; onChange: (matchup: MatchupId) => void }) => {
+const GovernmentSelector = ({ faction, value, onChange, pending = false }: { faction: FactionId; value: GovernmentType; onChange?: (government: GovernmentType) => void; pending?: boolean }) => {
   const language = useLanguage()
-  return <div className="matchup-choice" role="group" aria-label={pick(language, 'Staatsform-Paarung', 'Government matchup')}>
-    {constants.MATCHUP_OPTIONS.map((matchup) => {
-      const [blue, red] = matchup.split('-') as ['democracy' | 'autocracy', 'democracy' | 'autocracy']
-      return <button type="button" key={matchup} className={value === matchup ? 'active' : ''} aria-pressed={value === matchup} onClick={() => onChange(matchup)}>
-        <strong>{matchupText(matchup, language)}</strong>
-        <small>{governmentText(blue, language).benefit}{blue !== red ? ` · ${governmentText(red, language).benefit}` : ''}</small>
-      </button>
-    })}
-  </div>
+  return <section className={`government-side ${factionClass(faction)} ${pending ? 'is-pending' : ''}`}>
+    <div className="government-side-heading">
+      <span>{factionText(faction, language).adjective}</span>
+      <small>{faction === 'blue' ? pick(language, 'Blaue Koalition', 'Blue Coalition') : pick(language, 'Rote Koalition', 'Red Coalition')}</small>
+    </div>
+    {pending
+      ? <div className="government-pending"><strong>{pick(language, 'Wird von Rot gewählt', 'Selected by Red')}</strong><small>{pick(language, 'nach Eingabe des Raumcodes', 'after entering the room code')}</small></div>
+      : <div className="government-options" role="group" aria-label={`${factionText(faction, language).adjective}: ${pick(language, 'Staatsform wählen', 'choose government')}`}>
+          {constants.GOVERNMENT_OPTIONS.map((government) => <button type="button" key={government} className={value === government ? 'active' : ''} aria-pressed={value === government} onClick={() => onChange?.(government)}>
+            <strong>{governmentText(government, language).name}</strong>
+            <small>{governmentText(government, language).benefit}</small>
+          </button>)}
+        </div>}
+  </section>
 }
+
+const GovernmentSetup = ({ governments, onChange, pendingRed = false }: { governments: GovernmentSelection; onChange: (faction: FactionId, government: GovernmentType) => void; pendingRed?: boolean }) => (
+  <div className="government-setup">
+    <GovernmentSelector faction="blue" value={governments.blue} onChange={(government) => onChange('blue', government)} />
+    <GovernmentSelector faction="red" value={governments.red} onChange={(government) => onChange('red', government)} pending={pendingRed} />
+  </div>
+)
 
 const RESOURCE_ORDER: ResourceKey[] = ['presence', 'awareness', 'access', 'logistics']
 
@@ -643,7 +657,7 @@ const HelpDialog = ({ onClose }: { onClose: () => void }) => {
     >
       <section className="route-rules-dialog help-dialog">
         <header>
-          <div><span className="eyebrow">{pick(language, 'SPIELHILFE · VERSION 1.0', 'GAME HELP · VERSION 1.0')}</span><h2 id="help-title">{pick(language, 'Seewege führen', 'Command the Sea Lines')}</h2></div>
+          <div><span className="eyebrow">{pick(language, 'SPIELHILFE · VERSION 1.01', 'GAME HELP · VERSION 1.01')}</span><h2 id="help-title">{pick(language, 'Seewege führen', 'Command the Sea Lines')}</h2></div>
           <button type="button" onClick={onClose} aria-label={pick(language, 'Regelhilfe schließen', 'Close rules')}>×</button>
         </header>
 
@@ -844,37 +858,43 @@ const GameMenu = ({ onMainMenu, onNewGame, onHelp, ...musicSettings }: GameMenuP
   </div>
 }
 
-const NewGameDialog = ({ initialRounds, initialMatchup, online, onClose, onConfirm }: { initialRounds: RoundCount; initialMatchup: MatchupId; online: boolean; onClose: () => void; onConfirm: (rounds: RoundCount, matchup: MatchupId) => void }) => {
+const NewGameDialog = ({ initialRounds, initialGovernments, onlineFaction, onClose, onConfirm }: { initialRounds: RoundCount; initialGovernments: GovernmentSelection; onlineFaction?: FactionId; onClose: () => void; onConfirm: (rounds: RoundCount, governments: GovernmentSelection) => void }) => {
   const language = useLanguage()
   const [rounds, setRounds] = useState<RoundCount>(initialRounds)
-  const [matchup, setMatchup] = useState<MatchupId>(initialMatchup)
+  const [governments, setGovernments] = useState<GovernmentSelection>({ ...initialGovernments })
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose() }
     window.addEventListener('keydown', closeOnEscape)
     return () => window.removeEventListener('keydown', closeOnEscape)
   }, [onClose])
   return <div className="modal-backdrop launch-backdrop" role="dialog" aria-modal="true" aria-labelledby="new-game-title" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
-    <section className={`round-selection-dialog ${online ? 'is-online' : ''}`}>
-      <span className="eyebrow">{online ? pick(language, 'ONLINE-REVANCHE', 'ONLINE REMATCH') : pick(language, 'NEUE PARTIE', 'NEW GAME')}</span>
+    <section className={`round-selection-dialog ${onlineFaction ? 'is-online' : ''}`}>
+      <span className="eyebrow">{onlineFaction ? pick(language, 'ONLINE-REVANCHE', 'ONLINE REMATCH') : pick(language, 'NEUE PARTIE', 'NEW GAME')}</span>
       <h2 id="new-game-title">{pick(language, 'Runden und Staatsformen', 'Rounds and governments')}</h2>
-      <p>{online
-        ? pick(language, 'Die andere Koalition muss dem Neustart im bestehenden Raum zustimmen.', 'The other coalition must accept the restart in the existing room.')
+      <p>{onlineFaction
+        ? pick(language, 'Wähle deine Staatsform. Die andere Koalition entscheidet beim Annehmen über ihre eigene Seite.', 'Choose your government. The other coalition selects its own side when accepting.')
         : pick(language, 'Die laufende lokale Partie wird erst nach deiner Bestätigung ersetzt.', 'The current local game is replaced only after you confirm.')}</p>
       <div className="round-choice" role="group" aria-label={pick(language, 'Rundenzahl', 'Round count')}>
         {constants.ROUND_OPTIONS.map((option) => <button key={option} type="button" className={rounds === option ? 'active' : ''} aria-pressed={rounds === option} onClick={() => setRounds(option)}><strong>{option}</strong><small>{pick(language, 'Runden', 'rounds')}</small></button>)}
       </div>
-      <MatchupSelector value={matchup} onChange={setMatchup} />
+      {onlineFaction
+        ? <div className="government-setup single-side"><GovernmentSelector faction={onlineFaction} value={governments[onlineFaction]} onChange={(government) => setGovernments((current) => ({ ...current, [onlineFaction]: government }))} /></div>
+        : <GovernmentSetup governments={governments} onChange={(faction, government) => setGovernments((current) => ({ ...current, [faction]: government }))} />}
       <div className="launch-actions">
         <button className="mode-text-button" type="button" onClick={onClose}>{pick(language, 'Abbrechen', 'Cancel')}</button>
-        <button className="mode-primary" type="button" onClick={() => onConfirm(rounds, matchup)}>{online ? pick(language, 'Vorschlagen', 'Propose') : pick(language, 'Neu starten', 'Restart')} <span>→</span></button>
+        <button className="mode-primary" type="button" onClick={() => onConfirm(rounds, governments)}>{onlineFaction ? pick(language, 'Vorschlagen', 'Propose') : pick(language, 'Neu starten', 'Restart')} <span>→</span></button>
       </div>
     </section>
   </div>
 }
 
-const RematchDialog = ({ snapshot, faction, onAccept, onDecline, onCancel }: { snapshot: RoomSnapshot; faction: FactionId; onAccept: () => void; onDecline: () => void; onCancel: () => void }) => {
+const RematchDialog = ({ snapshot, faction, onAccept, onDecline, onCancel }: { snapshot: RoomSnapshot; faction: FactionId; onAccept: (government: GovernmentType) => void; onDecline: () => void; onCancel: () => void }) => {
   const language = useLanguage()
   const proposal = snapshot.rematchProposal
+  const [government, setGovernment] = useState<GovernmentType>(snapshot.state.governments[faction])
+  useEffect(() => {
+    if (proposal) setGovernment(snapshot.state.governments[faction])
+  }, [proposal?.requestedBy, proposal?.maxRounds, faction, snapshot.state.governments])
   if (!proposal) return null
   const own = proposal.requestedBy === faction
   return <div className="modal-backdrop rematch-backdrop" role="dialog" aria-modal="true" aria-labelledby="rematch-title">
@@ -883,12 +903,13 @@ const RematchDialog = ({ snapshot, faction, onAccept, onDecline, onCancel }: { s
       <span className="eyebrow">{pick(language, 'NEUE PARTIE · GLEICHER RAUM', 'NEW GAME · SAME ROOM')}</span>
       <h2 id="rematch-title">{own ? pick(language, 'Vorschlag gesendet', 'Proposal sent') : pick(language, 'Revanche vorgeschlagen', 'Rematch proposed')}</h2>
       <p>{own
-        ? pick(language, `Die andere Koalition entscheidet über ${proposal.maxRounds} Runden · ${matchupText(proposal.matchup, language)}. Der aktuelle Spielstand bleibt bis dahin erhalten.`, `The other coalition is deciding on ${proposal.maxRounds} rounds · ${matchupText(proposal.matchup, language)}. The current state remains intact until then.`)
-        : pick(language, `${factionText(proposal.requestedBy, language).name} schlägt ${proposal.maxRounds} Runden · ${matchupText(proposal.matchup, language)} vor. Raumcode und Seiten bleiben gleich.`, `${factionText(proposal.requestedBy, language).name} proposes ${proposal.maxRounds} rounds · ${matchupText(proposal.matchup, language)}. Room code and sides stay the same.`)}</p>
+        ? pick(language, `Du hast ${proposal.maxRounds} Runden als ${governmentText(proposal.government, language).name} vorgeschlagen. Die andere Koalition wählt ihre eigene Staatsform.`, `You proposed ${proposal.maxRounds} rounds as a ${governmentText(proposal.government, language).name}. The other coalition chooses its own government.`)
+        : pick(language, `${factionText(proposal.requestedBy, language).name} schlägt ${proposal.maxRounds} Runden als ${governmentText(proposal.government, language).name} vor. Wähle deine Staatsform für die Revanche.`, `${factionText(proposal.requestedBy, language).name} proposes ${proposal.maxRounds} rounds as a ${governmentText(proposal.government, language).name}. Choose your government for the rematch.`)}</p>
+      {!own && <div className="government-setup single-side compact"><GovernmentSelector faction={faction} value={government} onChange={setGovernment} /></div>}
       <div className="dialog-actions">
         {own
           ? <button className="ghost-button" type="button" onClick={onCancel}>{pick(language, 'Vorschlag zurückziehen', 'Withdraw proposal')}</button>
-          : <><button className="ghost-button" type="button" onClick={onDecline}>{pick(language, 'Ablehnen', 'Decline')}</button><button className="confirm-button" type="button" onClick={onAccept}>{pick(language, 'Neue Partie starten', 'Start new game')}</button></>}
+          : <><button className="ghost-button" type="button" onClick={onDecline}>{pick(language, 'Ablehnen', 'Decline')}</button><button className="confirm-button" type="button" onClick={() => onAccept(government)}>{pick(language, 'Neue Partie starten', 'Start new game')}</button></>}
       </div>
     </section>
   </div>
@@ -1114,8 +1135,8 @@ interface ModeSelectionProps extends MusicSettingsProps {
   onLanguage: (language: Language) => void
   rounds: RoundCount
   onRounds: (rounds: RoundCount) => void
-  matchup: MatchupId
-  onMatchup: (matchup: MatchupId) => void
+  governments: GovernmentSelection
+  onGovernments: (governments: GovernmentSelection) => void
   busy: boolean
   error?: string
   hasSavedSingleGame: boolean
@@ -1124,14 +1145,16 @@ interface ModeSelectionProps extends MusicSettingsProps {
   onSingleplayer: (fresh: boolean) => void
   onLocalPvp: (fresh: boolean) => void
   onCreateRoom: () => void
-  onJoinRoom: (code: string) => void
+  onJoinRoom: (code: string, government: GovernmentType) => void
   onResumeRoom: (session: OnlineSession) => void
 }
 
-const ModeSelection = ({ language, onLanguage, rounds, onRounds, matchup, onMatchup, busy, error, hasSavedSingleGame, hasSavedLocalGame, savedOnlineSession, onSingleplayer, onLocalPvp, onCreateRoom, onJoinRoom, onResumeRoom, musicVolume, musicMuted, onMusicVolume, onMusicMuted, onMusicStart }: ModeSelectionProps) => {
+const ModeSelection = ({ language, onLanguage, rounds, onRounds, governments, onGovernments, busy, error, hasSavedSingleGame, hasSavedLocalGame, savedOnlineSession, onSingleplayer, onLocalPvp, onCreateRoom, onJoinRoom, onResumeRoom, musicVolume, musicMuted, onMusicVolume, onMusicMuted, onMusicStart }: ModeSelectionProps) => {
   const queryRoom = new URLSearchParams(window.location.search).get('room') ?? ''
   const [joinCode, setJoinCode] = useState(queryRoom.toUpperCase())
   const [launchMode, setLaunchMode] = useState<'singleplayer' | 'local-pvp' | 'online'>()
+  const [joiningCode, setJoiningCode] = useState<string>()
+  const [joinGovernment, setJoinGovernment] = useState<GovernmentType>('democracy')
 
   const confirmLaunch = () => {
     if (launchMode === 'singleplayer') onSingleplayer(true)
@@ -1156,7 +1179,7 @@ const ModeSelection = ({ language, onLanguage, rounds, onRounds, matchup, onMatc
       </div>
       <header className="mode-brand">
         <span className="mode-brand-mark">✦</span>
-        <div><span>SEA LINES OF</span><strong>COMMUNICATION</strong><small>{pick(language, 'VERSION 1.0 · Staatsformen und Seewege', 'VERSION 1.0 · Governments and sea lines')}</small></div>
+        <div><span>SEA LINES OF</span><strong>COMMUNICATION</strong><small>{pick(language, 'VERSION 1.01 · Freie Staatsformwahl', 'VERSION 1.01 · Free government selection')}</small></div>
       </header>
       <section className="mode-intro">
         <span className="eyebrow">{pick(language, 'EINSATZBEREITSCHAFT HERSTELLEN', 'ESTABLISH READINESS')}</span>
@@ -1206,7 +1229,7 @@ const ModeSelection = ({ language, onLanguage, rounds, onRounds, matchup, onMatc
                 aria-label={pick(language, 'Sechsstelliger Raumcode', 'Six-character room code')}
                 maxLength={6}
               />
-              <button type="button" disabled={busy || joinCode.length !== 6} onClick={() => onJoinRoom(joinCode)}>{pick(language, 'Beitreten', 'Join')}</button>
+              <button type="button" disabled={busy || joinCode.length !== 6} onClick={() => setJoiningCode(joinCode)}>{pick(language, 'Beitreten', 'Join')}</button>
             </div>
           </div>
           {savedOnlineSession && (
@@ -1225,7 +1248,7 @@ const ModeSelection = ({ language, onLanguage, rounds, onRounds, matchup, onMatc
             <span className="eyebrow">{pick(language, 'EINSATZDAUER', 'CAMPAIGN LENGTH')}</span>
             <h2 id="round-selection-title">{pick(language, 'Runden und Staatsformen', 'Rounds and governments')}</h2>
             <p>{launchMode === 'online'
-              ? pick(language, 'Du legst die Dauer für den neuen privaten Spielraum fest.', 'You set the length of the new private game room.')
+              ? pick(language, 'Du legst Dauer und Staatsform für Blau fest. Rot wählt die eigene Staatsform beim Beitritt.', 'You set the length and Blue government. Red chooses its own government when joining.')
               : pick(language, 'Wähle die Dauer der neuen Partie. Sechs Runden sind das Minimum.', 'Choose the length of the new game. Six rounds is the minimum.')}</p>
             <div className="round-choice" role="group" aria-label={pick(language, 'Rundenzahl', 'Number of rounds')}>
               {constants.ROUND_OPTIONS.map((value) => (
@@ -1234,12 +1257,26 @@ const ModeSelection = ({ language, onLanguage, rounds, onRounds, matchup, onMatc
                 </button>
               ))}
             </div>
-            <MatchupSelector value={matchup} onChange={onMatchup} />
+            <GovernmentSetup governments={governments} onChange={(faction, government) => onGovernments({ ...governments, [faction]: government })} pendingRed={launchMode === 'online'} />
             <div className="round-dialog-actions">
               <button className="mode-text-button" type="button" disabled={busy} onClick={() => setLaunchMode(undefined)}>{pick(language, 'Abbrechen', 'Cancel')}</button>
               <button className="mode-primary" type="button" disabled={busy} onClick={confirmLaunch}>
                 {launchMode === 'online' ? pick(language, 'Raum eröffnen', 'Open room') : pick(language, 'Partie starten', 'Start game')} <span>→</span>
               </button>
+            </div>
+          </section>
+        </div>
+      )}
+      {joiningCode && (
+        <div className="modal-backdrop launch-backdrop" role="dialog" aria-modal="true" aria-labelledby="join-government-title">
+          <section className="round-selection-dialog is-online join-government-dialog">
+            <span className="eyebrow">{pick(language, `RAUM ${joiningCode} · ROTE KOALITION`, `ROOM ${joiningCode} · RED COALITION`)}</span>
+            <h2 id="join-government-title">{pick(language, 'Deine Staatsform', 'Your government')}</h2>
+            <p>{pick(language, 'Wähle jetzt die Staatsform für Rot. Blau wurde bereits vom Host festgelegt.', 'Choose Red’s government now. Blue has already been set by the host.')}</p>
+            <div className="government-setup single-side"><GovernmentSelector faction="red" value={joinGovernment} onChange={setJoinGovernment} /></div>
+            <div className="round-dialog-actions">
+              <button className="mode-text-button" type="button" disabled={busy} onClick={() => setJoiningCode(undefined)}>{pick(language, 'Abbrechen', 'Cancel')}</button>
+              <button className="mode-primary" type="button" disabled={busy} onClick={() => { onJoinRoom(joiningCode, joinGovernment); setJoiningCode(undefined) }}>{pick(language, 'Partie beitreten', 'Join game')} <span>→</span></button>
             </div>
           </section>
         </div>
@@ -1274,7 +1311,7 @@ const OnlineLobby = ({ session, snapshot, connection, onLeave, ...musicSettings 
         <p>{snapshot?.status === 'waiting'
           ? pick(language, 'Teile den Link oder den Raumcode mit der zweiten Person. Du übernimmst die Blaue Koalition.', 'Share the link or room code with the second player. You command the Blue Coalition.')
           : `${pick(language, 'Dein Sitz als', 'Your seat as')} ${factionText(session.faction, language).adjective} ${pick(language, 'wird mit dem gemeinsamen Spielstand verbunden.', 'is connecting to the shared game state.')}`}</p>
-        {snapshot && <p><strong>{snapshot.state.maxRounds} {pick(language, 'Runden', 'Rounds')}</strong> · {matchupText(snapshot.state.matchup, language)} · {pick(language, 'vom Host festgelegt', 'set by host')}</p>}
+        {snapshot && <p><strong>{snapshot.state.maxRounds} {pick(language, 'Runden', 'Rounds')}</strong> · {pick(language, 'Blau', 'Blue')}: {governmentText(snapshot.state.governments.blue, language).name} · {pick(language, 'Rot wählt beim Beitritt', 'Red chooses when joining')}</p>}
         <div className="room-code" aria-label={`${pick(language, 'Raumcode', 'Room code')} ${session.roomCode}`}>{session.roomCode.split('').map((letter, index) => <span key={`${letter}-${index}`}>{letter}</span>)}</div>
         <div className="lobby-actions">
           <button className="mode-primary" type="button" onClick={copyInvite}>{copied ? pick(language, 'Link kopiert', 'Link copied') : pick(language, 'Einladungslink kopieren', 'Copy invitation link')}</button>
@@ -1302,7 +1339,7 @@ const HandoffOverlay = ({ faction, onReady }: { faction: FactionId; onReady: () 
 function GameApp({ language, onLanguage }: { language: Language; onLanguage: (language: Language) => void }) {
   const [mode, setMode] = useState<'menu' | 'singleplayer' | 'local-pvp' | 'multiplayer'>('menu')
   const [selectedRounds, setSelectedRounds] = useState<RoundCount>(constants.DEFAULT_ROUNDS)
-  const [selectedMatchup, setSelectedMatchup] = useState<MatchupId>(constants.DEFAULT_MATCHUP)
+  const [selectedGovernments, setSelectedGovernments] = useState<GovernmentSelection>({ ...constants.DEFAULT_GOVERNMENTS })
   const [musicVolume, setMusicVolume] = useState(loadMusicVolume)
   const [musicMuted, setMusicMuted] = useState(loadMusicMuted)
   const [state, setState] = useState<GameState>(loadState)
@@ -1377,6 +1414,7 @@ function GameApp({ language, onLanguage }: { language: Language; onLanguage: (la
             const previous = previousOnlineTurnRef.current
             const suppressNotice = suppressNextTurnNoticeRef.current
             suppressNextTurnNoticeRef.current = false
+            if (previous?.status === 'waiting' && message.status === 'playing') setOnlineSetupNotice(true)
             if (!suppressNotice
               && previous
               && message.revision > previous.revision
@@ -1485,7 +1523,7 @@ function GameApp({ language, onLanguage }: { language: Language; onLanguage: (la
   const canAct = state.phase === 'action'
     && state.activeFaction === viewerFaction
     && (!isLocalPvp || handoffReady)
-    && (!isOnline || (roomSnapshot?.status === 'playing' && connection === 'connected' && !submitting))
+    && (!isOnline || (roomSnapshot?.status === 'playing' && connection === 'connected' && !submitting && !onlineSetupNotice))
 
   const selectedCard = canAct ? state.hands[state.activeFaction].find((entry) => entry.instanceId === selectedCardId) : undefined
   const selectedDefinition = selectedCard ? CARDS[selectedCard.cardId] : undefined
@@ -1584,7 +1622,7 @@ function GameApp({ language, onLanguage }: { language: Language; onLanguage: (la
 
   const restartSingleplayer = () => {
     if (state.phase !== 'complete' && !window.confirm(pick(language, 'Laufende Partie wirklich verwerfen und neu beginnen?', 'Discard the current game and start again?'))) return
-    const fresh = createInitialState(state.maxRounds, state.matchup)
+    const fresh = createInitialState(state.maxRounds, state.governments)
     setState(fresh)
     setInspected('central_basin')
     clearSelection()
@@ -1593,7 +1631,7 @@ function GameApp({ language, onLanguage }: { language: Language; onLanguage: (la
   const restartCurrentLocalGame = () => {
     if (mode !== 'local-pvp') return restartSingleplayer()
     if (state.phase !== 'complete' && !window.confirm(pick(language, 'Laufende Partie wirklich verwerfen und neu beginnen?', 'Discard the current game and start again?'))) return
-    const fresh = createInitialState(state.maxRounds, state.matchup)
+    const fresh = createInitialState(state.maxRounds, state.governments)
     setState(fresh)
     localStorage.setItem(LOCAL_PVP_STORAGE_KEY, JSON.stringify(fresh))
     setHandoffReady(false)
@@ -1601,15 +1639,17 @@ function GameApp({ language, onLanguage }: { language: Language; onLanguage: (la
     clearSelection()
   }
 
-  const confirmNewGame = (rounds: RoundCount, matchup: MatchupId) => {
+  const confirmNewGame = (rounds: RoundCount, governments: GovernmentSelection) => {
     try {
       if (isOnline) {
         if (!roomSnapshot || socketRef.current?.readyState !== WebSocket.OPEN) throw new Error('Die Online-Verbindung ist noch nicht bereit.')
-        socketRef.current.send(JSON.stringify({ type: 'request-rematch', maxRounds: rounds, matchup, revision: roomSnapshot.revision } satisfies RoomCommand))
+        const faction = onlineSession?.faction
+        if (!faction) throw new Error('Die Online-Sitzung ist nicht vollständig.')
+        socketRef.current.send(JSON.stringify({ type: 'request-rematch', maxRounds: rounds, government: governments[faction], revision: roomSnapshot.revision } satisfies RoomCommand))
         pendingRevisionRef.current = roomSnapshot.revision
         setSubmitting(true)
       } else {
-        const fresh = createInitialState(rounds, matchup)
+        const fresh = createInitialState(rounds, governments)
         setState(fresh)
         if (isLocalPvp) {
           localStorage.setItem(LOCAL_PVP_STORAGE_KEY, JSON.stringify(fresh))
@@ -1626,10 +1666,13 @@ function GameApp({ language, onLanguage }: { language: Language; onLanguage: (la
     }
   }
 
-  const handleRematch = (type: 'accept-rematch' | 'decline-rematch' | 'cancel-rematch') => {
+  const handleRematch = (type: 'accept-rematch' | 'decline-rematch' | 'cancel-rematch', government?: GovernmentType) => {
     try {
       if (!roomSnapshot || socketRef.current?.readyState !== WebSocket.OPEN) throw new Error('Die Online-Verbindung ist noch nicht bereit.')
-      socketRef.current.send(JSON.stringify({ type, revision: roomSnapshot.revision } satisfies RoomCommand))
+      const command: RoomCommand = type === 'accept-rematch'
+        ? { type, government: government ?? state.governments[onlineSession?.faction ?? 'blue'], revision: roomSnapshot.revision }
+        : { type, revision: roomSnapshot.revision }
+      socketRef.current.send(JSON.stringify(command))
       pendingRevisionRef.current = roomSnapshot.revision
       setSubmitting(true)
       clearSelection()
@@ -1641,7 +1684,7 @@ function GameApp({ language, onLanguage }: { language: Language; onLanguage: (la
   const startSingleplayer = (fresh: boolean) => {
     setError(undefined)
     if (fresh) {
-      const initial = createInitialState(selectedRounds, selectedMatchup)
+      const initial = createInitialState(selectedRounds, selectedGovernments)
       setState(initial)
       localStorage.setItem(STORAGE_KEY, JSON.stringify(initial))
     } else {
@@ -1654,7 +1697,7 @@ function GameApp({ language, onLanguage }: { language: Language; onLanguage: (la
 
   const startLocalPvp = (fresh: boolean) => {
     setError(undefined)
-    const initial = fresh ? createInitialState(selectedRounds, selectedMatchup) : loadState(LOCAL_PVP_STORAGE_KEY)
+    const initial = fresh ? createInitialState(selectedRounds, selectedGovernments) : loadState(LOCAL_PVP_STORAGE_KEY)
     setState(initial)
     if (fresh) localStorage.setItem(LOCAL_PVP_STORAGE_KEY, JSON.stringify(initial))
     setInspected('central_basin')
@@ -1683,7 +1726,7 @@ function GameApp({ language, onLanguage }: { language: Language; onLanguage: (la
     setLauncherBusy(true)
     setError(undefined)
     try {
-      const response = await createOnlineRoom(selectedRounds, selectedMatchup)
+      const response = await createOnlineRoom(selectedRounds, selectedGovernments.blue)
       enterOnlineSession(response.session, response.snapshot)
     } catch (reason) {
       setLauncherBusy(false)
@@ -1691,11 +1734,11 @@ function GameApp({ language, onLanguage }: { language: Language; onLanguage: (la
     }
   }
 
-  const joinRoom = async (code: string) => {
+  const joinRoom = async (code: string, government: GovernmentType) => {
     setLauncherBusy(true)
     setError(undefined)
     try {
-      const response = await joinOnlineRoom(code)
+      const response = await joinOnlineRoom(code, government)
       enterOnlineSession(response.session, response.snapshot, true)
       const url = new URL(window.location.href)
       url.searchParams.delete('room')
@@ -1729,12 +1772,12 @@ function GameApp({ language, onLanguage }: { language: Language; onLanguage: (la
         onLanguage={onLanguage}
         rounds={selectedRounds}
         onRounds={setSelectedRounds}
-        matchup={selectedMatchup}
-        onMatchup={setSelectedMatchup}
+        governments={selectedGovernments}
+        onGovernments={setSelectedGovernments}
         busy={launcherBusy}
         error={error}
-        hasSavedSingleGame={Boolean(localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(V6_STORAGE_KEY) ?? localStorage.getItem(V5_STORAGE_KEY) ?? localStorage.getItem(V4_STORAGE_KEY) ?? localStorage.getItem(V3_STORAGE_KEY) ?? localStorage.getItem(V2_STORAGE_KEY) ?? localStorage.getItem(LEGACY_STORAGE_KEY))}
-        hasSavedLocalGame={Boolean(localStorage.getItem(LOCAL_PVP_STORAGE_KEY) ?? localStorage.getItem(V6_LOCAL_PVP_STORAGE_KEY) ?? localStorage.getItem(V5_LOCAL_PVP_STORAGE_KEY) ?? localStorage.getItem(V4_LOCAL_PVP_STORAGE_KEY))}
+        hasSavedSingleGame={Boolean(localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(V7_STORAGE_KEY) ?? localStorage.getItem(V6_STORAGE_KEY) ?? localStorage.getItem(V5_STORAGE_KEY) ?? localStorage.getItem(V4_STORAGE_KEY) ?? localStorage.getItem(V3_STORAGE_KEY) ?? localStorage.getItem(V2_STORAGE_KEY) ?? localStorage.getItem(LEGACY_STORAGE_KEY))}
+        hasSavedLocalGame={Boolean(localStorage.getItem(LOCAL_PVP_STORAGE_KEY) ?? localStorage.getItem(V7_LOCAL_PVP_STORAGE_KEY) ?? localStorage.getItem(V6_LOCAL_PVP_STORAGE_KEY) ?? localStorage.getItem(V5_LOCAL_PVP_STORAGE_KEY) ?? localStorage.getItem(V4_LOCAL_PVP_STORAGE_KEY))}
         savedOnlineSession={savedOnlineSession}
         onSingleplayer={startSingleplayer}
         onLocalPvp={startLocalPvp}
@@ -1828,15 +1871,15 @@ function GameApp({ language, onLanguage }: { language: Language; onLanguage: (la
       {(!isOnline || !roomSnapshot?.rematchProposal) && <EndGameDialog state={state} onNewGame={() => setShowNewGame(true)} onMainMenu={leaveToMenu} />}
       {isLocalPvp && !handoffReady && state.phase === 'action' && <HandoffOverlay faction={state.activeFaction} onReady={() => setHandoffReady(true)} />}
       {showHelp && <HelpDialog onClose={() => setShowHelp(false)} />}
-      {showNewGame && <NewGameDialog initialRounds={state.maxRounds} initialMatchup={state.matchup} online={isOnline} onClose={() => setShowNewGame(false)} onConfirm={confirmNewGame} />}
-      {isOnline && roomSnapshot && onlineSession && <RematchDialog snapshot={roomSnapshot} faction={onlineSession.faction} onAccept={() => handleRematch('accept-rematch')} onDecline={() => handleRematch('decline-rematch')} onCancel={() => handleRematch('cancel-rematch')} />}
+      {showNewGame && <NewGameDialog initialRounds={state.maxRounds} initialGovernments={state.governments} onlineFaction={isOnline ? onlineSession?.faction : undefined} onClose={() => setShowNewGame(false)} onConfirm={confirmNewGame} />}
+      {isOnline && roomSnapshot && onlineSession && <RematchDialog snapshot={roomSnapshot} faction={onlineSession.faction} onAccept={(government) => handleRematch('accept-rematch', government)} onDecline={() => handleRematch('decline-rematch')} onCancel={() => handleRematch('cancel-rematch')} />}
       {isOnline && onlineSetupNotice && onlineSession && (
         <div className="modal-backdrop online-setup-backdrop" role="dialog" aria-modal="true" aria-labelledby="online-setup-title">
           <section className={`handoff-dialog online-setup ${factionClass(onlineSession.faction)}`}>
             <span className="result-compass">◇</span>
             <span className="eyebrow">{pick(language, 'ONLINE · EINSATZBEREIT', 'ONLINE · READY')}</span>
-            <h2 id="online-setup-title">{matchupText(state.matchup, language)}</h2>
-            <p>{pick(language, 'Der Host hat die Staatsformen festgelegt.', 'The host selected the governments.')}</p>
+            <h2 id="online-setup-title">{pick(language, `Du spielst ${governmentText(state.governments[onlineSession.faction], language).name}`, `You play ${governmentText(state.governments[onlineSession.faction], language).name}`)}</h2>
+            <p>{pick(language, `Gegenüber: ${factionText(otherFaction(onlineSession.faction), language).name} · ${governmentText(state.governments[otherFaction(onlineSession.faction)], language).name}`, `Opponent: ${factionText(otherFaction(onlineSession.faction), language).name} · ${governmentText(state.governments[otherFaction(onlineSession.faction)], language).name}`)}</p>
             <div className="setup-government-summary">
               {(['blue', 'red'] as const).map((faction) => <span className={factionClass(faction)} key={faction}><b>{factionText(faction, language).adjective}: {governmentText(state.governments[faction], language).name}</b><small>{governmentText(state.governments[faction], language).benefit}</small></span>)}
             </div>

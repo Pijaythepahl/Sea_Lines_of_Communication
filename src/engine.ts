@@ -6,9 +6,9 @@ import type {
   CovertOperation,
   FactionId,
   GameState,
+  GovernmentSelection,
   GovernmentType,
   LeadershipRating,
-  MatchupId,
   RegionId,
   ResourceLevels,
   RoundCount,
@@ -21,18 +21,12 @@ import type {
 
 const DEFAULT_ROUNDS: RoundCount = 6
 const ROUND_OPTIONS: RoundCount[] = [6, 12, 18]
-const DEFAULT_MATCHUP: MatchupId = 'democracy-democracy'
-const MATCHUP_OPTIONS: MatchupId[] = ['democracy-democracy', 'democracy-autocracy', 'autocracy-autocracy']
+const DEFAULT_GOVERNMENTS: GovernmentSelection = { blue: 'democracy', red: 'democracy' }
+const GOVERNMENT_OPTIONS: GovernmentType[] = ['democracy', 'autocracy']
 const ACTION_POINTS = 3
 const HAND_LIMIT = 7
 const MAX_ESCALATION = 8
 const MAX_DETOUR_CAPACITY = 5
-
-const MATCHUP_GOVERNMENTS: Record<MatchupId, Record<FactionId, GovernmentType>> = {
-  'democracy-democracy': { blue: 'democracy', red: 'democracy' },
-  'democracy-autocracy': { blue: 'democracy', red: 'autocracy' },
-  'autocracy-autocracy': { blue: 'autocracy', red: 'autocracy' },
-}
 
 export const COVERT_CARD_IDS: CardId[] = ['shadowing_operation', 'hybrid_pressure']
 
@@ -82,9 +76,9 @@ const addLog = (state: GameState, message: string, faction?: FactionId, code?: s
   state.log.unshift({ id: `${Date.now()}-${Math.random()}`, round: state.round, faction, message, code, params })
 }
 
-export const createInitialState = (maxRounds: RoundCount = DEFAULT_ROUNDS, matchup: MatchupId = DEFAULT_MATCHUP): GameState => {
+export const createInitialState = (maxRounds: RoundCount = DEFAULT_ROUNDS, governments: GovernmentSelection = DEFAULT_GOVERNMENTS): GameState => {
   if (!ROUND_OPTIONS.includes(maxRounds)) throw new Error('Ungültige Rundenzahl.')
-  if (!MATCHUP_OPTIONS.includes(matchup)) throw new Error('Ungültige Staatsform-Paarung.')
+  if (!GOVERNMENT_OPTIONS.includes(governments.blue) || !GOVERNMENT_OPTIONS.includes(governments.red)) throw new Error('Ungültige Staatsform.')
   const regions = Object.fromEntries(
     REGION_ORDER.map((id) => [id, { id, resources: { blue: EMPTY_RESOURCES(), red: EMPTY_RESOURCES() } }]),
   ) as GameState['regions']
@@ -99,10 +93,9 @@ export const createInitialState = (maxRounds: RoundCount = DEFAULT_ROUNDS, match
   const blueDeck = createDeck('blue', maxRounds)
   const redDeck = createDeck('red', maxRounds)
   const state: GameState = {
-    version: 7,
+    version: 8,
     maxRounds,
-    matchup,
-    governments: { ...MATCHUP_GOVERNMENTS[matchup] },
+    governments: { ...governments },
     round: 1,
     phase: 'action',
     activeFaction: 'blue',
@@ -642,9 +635,14 @@ export const createFactionView = (state: GameState, faction: FactionId): GameSta
 export const migrateGameState = (stored: unknown): GameState => {
   const next = structuredClone(stored) as any
   const sourceVersion = Number(next.version ?? 0)
-  if (next.version === 7) return next as GameState
-  next.matchup = MATCHUP_OPTIONS.includes(next.matchup) ? next.matchup : DEFAULT_MATCHUP
-  next.governments = next.governments ?? { ...MATCHUP_GOVERNMENTS[next.matchup as MatchupId] }
+  if (next.version === 8) return next as GameState
+  const legacyMatchup = String(next.matchup ?? 'democracy-democracy')
+  next.governments = next.governments ?? {
+    blue: legacyMatchup.startsWith('autocracy-') ? 'autocracy' : 'democracy',
+    red: legacyMatchup.endsWith('-autocracy') ? 'autocracy' : 'democracy',
+  }
+  if (!GOVERNMENT_OPTIONS.includes(next.governments.blue)) next.governments.blue = DEFAULT_GOVERNMENTS.blue
+  if (!GOVERNMENT_OPTIONS.includes(next.governments.red)) next.governments.red = DEFAULT_GOVERNMENTS.red
   next.maxRounds = ROUND_OPTIONS.includes(next.maxRounds) ? next.maxRounds : DEFAULT_ROUNDS
   next.escalation ??= 0
   next.roundEscalation ??= { blue: 0, red: 0 }
@@ -695,10 +693,11 @@ export const migrateGameState = (stored: unknown): GameState => {
   }
   delete next.deescalatedThisRound
   delete next.detourUpgradedRound
-  next.version = 7
+  delete next.matchup
+  next.version = 8
   return next as GameState
 }
 
 export const getCardDefinition = (instance: CardInstance) => CARDS[instance.cardId]
 
-export const constants = { DEFAULT_ROUNDS, ROUND_OPTIONS, DEFAULT_MATCHUP, MATCHUP_OPTIONS, ACTION_POINTS, HAND_LIMIT, MAX_ESCALATION, MAX_DETOUR_CAPACITY }
+export const constants = { DEFAULT_ROUNDS, ROUND_OPTIONS, DEFAULT_GOVERNMENTS, GOVERNMENT_OPTIONS, ACTION_POINTS, HAND_LIMIT, MAX_ESCALATION, MAX_DETOUR_CAPACITY }

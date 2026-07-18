@@ -1,7 +1,7 @@
 export type FactionId = 'blue' | 'red'
 export type RoundCount = 6 | 12 | 18
 export type GovernmentType = 'democracy' | 'autocracy'
-export type MatchupId = 'democracy-democracy' | 'democracy-autocracy' | 'autocracy-autocracy'
+export type GovernmentSelection = Record<FactionId, GovernmentType>
 
 export type RegionId =
   | 'western_sea'
@@ -177,10 +177,9 @@ export interface LeadershipRating {
 }
 
 export interface GameState {
-  version: 7
+  version: 8
   maxRounds: RoundCount
-  matchup: MatchupId
-  governments: Record<FactionId, GovernmentType>
+  governments: GovernmentSelection
   round: number
   phase: GamePhase
   activeFaction: FactionId

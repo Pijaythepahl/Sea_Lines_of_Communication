@@ -1,6 +1,6 @@
 import { createContext, useContext, type ReactNode } from 'react'
 import { CARDS, FACTIONS, REGIONS, RESOURCE_LABELS, ROUTES, USABILITY_LABELS } from './data'
-import type { CardDefinition, CardId, FactionId, GovernmentType, LogEntry, MatchupId, RegionDefinition, RegionId, ResourceKey, RouteDefinition, RouteId, Usability, WinnerResult, YieldResult } from './types'
+import type { CardDefinition, CardId, FactionId, GovernmentSelection, GovernmentType, LogEntry, RegionDefinition, RegionId, ResourceKey, RouteDefinition, RouteId, Usability, WinnerResult, YieldResult } from './types'
 
 export type Language = 'de' | 'en'
 
@@ -130,11 +130,8 @@ export const governmentText = (government: GovernmentType, language: Language) =
       benefit: pick(language, '+1 Ertrag bei Eskalation 3–5', '+1 Yield at Escalation 3–5'),
     }
 
-export const matchupText = (matchup: MatchupId, language: Language) => {
-  if (matchup === 'democracy-autocracy') return pick(language, 'Demokratie gegen Autokratie', 'Democracy vs Autocracy')
-  if (matchup === 'autocracy-autocracy') return pick(language, 'Autokratie gegen Autokratie', 'Autocracy vs Autocracy')
-  return pick(language, 'Demokratie gegen Demokratie', 'Democracy vs Democracy')
-}
+export const governmentPairingText = (governments: GovernmentSelection, language: Language) =>
+  `${governmentText(governments.blue, language).name} ${pick(language, 'gegen', 'vs')} ${governmentText(governments.red, language).name}`
 
 export const escalationLabel = (level: number, language: Language) => {
   if (level <= 1) return pick(language, 'Stabilität', 'Stability')
@@ -209,7 +206,7 @@ const ERROR_TRANSLATIONS: Record<string, string> = {
   'Der Spielstand wurde inzwischen aktualisiert. Bitte erneut versuchen.': 'The game state has changed. Please try again.',
   'Die Ausweich-SLOC hat bereits ihre maximale Kapazität erreicht.': 'The Detour SLOC has already reached maximum capacity.',
   'Ungültige Rundenzahl.': 'Invalid round count.',
-  'Ungültige Staatsform-Paarung.': 'Invalid government matchup.',
+  'Ungültige Staatsform.': 'Invalid government.',
   'Der Spielraum konnte nicht erreicht werden.': 'The game room could not be reached.',
   'Dieser Spielraum existiert nicht.': 'This game room does not exist.',
   'In diesem Spielraum sind bereits zwei Personen.': 'This game room already has two players.',
