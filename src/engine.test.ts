@@ -52,7 +52,7 @@ describe('relative Nutzbarkeit', () => {
 
 describe('Engpass und Handelsrouten', () => {
   it('vergibt Staatsformboni nur in den vereinbarten Eskalationsfenstern', () => {
-    const state = createInitialState(6, 'democracy-autocracy')
+    const state = createInitialState(6, { blue: 'democracy', red: 'autocracy' })
     for (const [escalation, democracy, autocracy] of [[0, 1, 0], [2, 1, 0], [3, 0, 1], [5, 0, 1], [6, 0, 0], [8, 0, 0]] as const) {
       state.escalation = escalation
       expect(calculateRouteYield(state, 'blue_main').governmentBonus).toBe(democracy)
@@ -107,7 +107,7 @@ describe('Engpass und Handelsrouten', () => {
 
 describe('Karten und Rundenfolge', () => {
   it('verstärkt nur das Heimatmeer oder einen über Zugang, Logistik und SLOC versorgten Vorposten', () => {
-    const state = createInitialState(6, 'autocracy-autocracy')
+    const state = createInitialState(6, { blue: 'autocracy', red: 'autocracy' })
     expect(getValidRegionTargets(state, 'forward_deployment')).toEqual(['western_sea'])
 
     state.regions.central_basin.resources.blue.access = 1
@@ -127,7 +127,7 @@ describe('Karten und Rundenfolge', () => {
   })
 
   it('verlegt Präsenz ein oder zwei Felder, ohne verwehrte Zwischenräume zu überspringen', () => {
-    const state = createInitialState(6, 'autocracy-autocracy')
+    const state = createInitialState(6, { blue: 'autocracy', red: 'autocracy' })
     const openTargets = getValidRegionTargets(state, 'patrol_group', ['western_sea'])
     expect(openTargets).toEqual(expect.arrayContaining(['northwest_passage', 'southwest_arc', 'central_basin', 'freeport_sea']))
 
@@ -302,27 +302,37 @@ describe('Karten und Rundenfolge', () => {
 })
 
 describe('Migration und Abschlussbewertung', () => {
-  it('initialisiert alle Staatsform-Paarungen für jede Partielänge', () => {
+  it('initialisiert jede freie Blau-/Rot-Kombination für jede Partielänge', () => {
     for (const rounds of [6, 12, 18] as const) {
-      expect(createInitialState(rounds, 'democracy-democracy').governments).toEqual({ blue: 'democracy', red: 'democracy' })
-      expect(createInitialState(rounds, 'democracy-autocracy').governments).toEqual({ blue: 'democracy', red: 'autocracy' })
-      expect(createInitialState(rounds, 'autocracy-autocracy').governments).toEqual({ blue: 'autocracy', red: 'autocracy' })
+      for (const blue of ['democracy', 'autocracy'] as const) {
+        for (const red of ['democracy', 'autocracy'] as const) {
+          expect(createInitialState(rounds, { blue, red }).governments).toEqual({ blue, red })
+        }
+      }
     }
   })
 
-  it('migriert ältere Spielstände auf Version 7, sechs Runden und Demokratie gegen Demokratie', () => {
+  it('migriert ältere Spielstände auf Version 8, sechs Runden und freie Staatsformen', () => {
     const legacy = structuredClone(createInitialState()) as unknown as Record<string, unknown>
     legacy.version = 4
     delete legacy.maxRounds
     delete legacy.routeCapacity
     delete legacy.covertOperations
     const migrated = migrateGameState(legacy)
-    expect(migrated.version).toBe(7)
+    expect(migrated.version).toBe(8)
     expect(migrated.maxRounds).toBe(6)
-    expect(migrated.matchup).toBe('democracy-democracy')
     expect(migrated.governments).toEqual({ blue: 'democracy', red: 'democracy' })
+    expect('matchup' in migrated).toBe(false)
     expect(migrated.routeCapacity).toMatchObject({ blue_main: 6, blue_detour: 3 })
     expect(migrated.covertOperations).toEqual([])
+  })
+
+  it('übernimmt die Staatsformen eines Version-7-Spielstands', () => {
+    const legacy = structuredClone(createInitialState()) as any
+    legacy.version = 7
+    legacy.matchup = 'democracy-autocracy'
+    delete legacy.governments
+    expect(migrateGameState(legacy).governments).toEqual({ blue: 'democracy', red: 'autocracy' })
   })
 
   it('beendet Partien nach der gewählten Rundenzahl und baut Decks 24/34/44 mit mehr Patrouillen', () => {

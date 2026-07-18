@@ -1,6 +1,6 @@
 import { DurableObject } from 'cloudflare:workers'
 import { createFactionView, createInitialState, endTurn, migrateGameState, playCard } from '../src/engine'
-import type { FactionId, GameCommand, GameState, MatchupId, RoundCount } from '../src/types'
+import type { FactionId, GameCommand, GameState, GovernmentType, RoundCount } from '../src/types'
 
 interface Env {
   ASSETS: Fetcher
@@ -14,7 +14,7 @@ interface RoomRecord {
   state: GameState
   tokens: { blue: string; red?: string }
   updatedAt: number
-  rematchProposal?: { requestedBy: FactionId; maxRounds: RoundCount; matchup: MatchupId }
+  rematchProposal?: { requestedBy: FactionId; maxRounds: RoundCount; government: GovernmentType }
 }
 
 interface SocketAttachment {
@@ -24,8 +24,8 @@ interface SocketAttachment {
 
 type RoomCommand =
   | (GameCommand & { revision: number })
-  | { type: 'request-rematch'; maxRounds: RoundCount; matchup: MatchupId; revision: number }
-  | { type: 'accept-rematch'; revision: number }
+  | { type: 'request-rematch'; maxRounds: RoundCount; government: GovernmentType; revision: number }
+  | { type: 'accept-rematch'; government: GovernmentType; revision: number }
   | { type: 'decline-rematch'; revision: number }
   | { type: 'cancel-rematch'; revision: number }
 
@@ -41,6 +41,13 @@ const roomCode = (): string => {
 }
 
 const tokenMatches = (room: RoomRecord, faction: FactionId, token: string): boolean => room.tokens[faction] === token
+const isGovernment = (value: unknown): value is GovernmentType => value === 'democracy' || value === 'autocracy'
+const legacyGovernment = (matchup: unknown, faction: FactionId): GovernmentType => {
+  const value = String(matchup ?? 'democracy-democracy')
+  return faction === 'blue'
+    ? value.startsWith('autocracy-') ? 'autocracy' : 'democracy'
+    : value.endsWith('-autocracy') ? 'autocracy' : 'democracy'
+}
 
 export class GameRoom extends DurableObject<Env> {
   private room: RoomRecord | null = null
@@ -50,8 +57,16 @@ export class GameRoom extends DurableObject<Env> {
     super(ctx, env)
     this.ready = ctx.blockConcurrencyWhile(async () => {
       this.room = await ctx.storage.get<RoomRecord>('room') ?? null
-      if (this.room && this.room.state.version !== 7) {
+      if (this.room && this.room.state.version !== 8) {
         this.room.state = migrateGameState(this.room.state)
+        const legacyProposal = this.room.rematchProposal as (RoomRecord['rematchProposal'] & { matchup?: string }) | undefined
+        if (legacyProposal && !isGovernment(legacyProposal.government)) {
+          this.room.rematchProposal = {
+            requestedBy: legacyProposal.requestedBy,
+            maxRounds: legacyProposal.maxRounds,
+            government: legacyGovernment(legacyProposal.matchup, legacyProposal.requestedBy),
+          }
+        }
         await ctx.storage.put('room', this.room)
       }
     })
@@ -111,12 +126,14 @@ export class GameRoom extends DurableObject<Env> {
 
     if (url.pathname === '/create' && request.method === 'POST') {
       if (this.room) return json({ error: 'Raumcode bereits vergeben.' }, 409)
-      const body = await request.json<{ code: string; maxRounds?: RoundCount; matchup?: MatchupId }>()
+      const body = await request.json<{ code: string; maxRounds?: RoundCount; blueGovernment?: GovernmentType; matchup?: string }>()
+      const blueGovernment = body.blueGovernment ?? legacyGovernment(body.matchup, 'blue')
+      if (!isGovernment(blueGovernment)) return json({ error: 'Ungültige Staatsform.' }, 400)
       this.room = {
         code: body.code,
         status: 'waiting',
         revision: 0,
-        state: createInitialState(body.maxRounds, body.matchup),
+        state: createInitialState(body.maxRounds, { blue: blueGovernment, red: 'democracy' }),
         tokens: { blue: crypto.randomUUID() },
         updatedAt: Date.now(),
       }
@@ -128,7 +145,14 @@ export class GameRoom extends DurableObject<Env> {
 
     if (url.pathname === '/join' && request.method === 'POST') {
       if (this.room.tokens.red) return json({ error: 'In diesem Spielraum sind bereits zwei Personen.' }, 409)
+      const body = await request.json<{ government?: GovernmentType }>().catch((): { government?: GovernmentType } => ({}))
+      const redGovernment = body.government ?? this.room.state.governments.red
+      if (!isGovernment(redGovernment)) return json({ error: 'Ungültige Staatsform.' }, 400)
       this.room.tokens.red = crypto.randomUUID()
+      this.room.state = createInitialState(this.room.state.maxRounds, {
+        blue: this.room.state.governments.blue,
+        red: redGovernment,
+      })
       this.room.status = 'playing'
       this.room.revision += 1
       await this.persist()
@@ -167,7 +191,7 @@ export class GameRoom extends DurableObject<Env> {
     }
 
     try {
-      const command = JSON.parse(typeof message === 'string' ? message : new TextDecoder().decode(message)) as RoomCommand
+      const command = JSON.parse(typeof message === 'string' ? message : new TextDecoder().decode(message)) as RoomCommand & { matchup?: string }
       if (command.revision !== this.room.revision) {
         socket.send(JSON.stringify(this.snapshot(attachment.faction)))
         throw new Error('Der Spielstand wurde inzwischen aktualisiert. Bitte erneut versuchen.')
@@ -176,11 +200,12 @@ export class GameRoom extends DurableObject<Env> {
       if (command.type === 'request-rematch') {
         if (!this.room.tokens.red) throw new Error('Eine neue Partie kann erst mit zwei besetzten Seiten vorgeschlagen werden.')
         if (![6, 12, 18].includes(command.maxRounds)) throw new Error('Ungültige Rundenzahl.')
-        if (!['democracy-democracy', 'democracy-autocracy', 'autocracy-autocracy'].includes(command.matchup)) throw new Error('Ungültige Staatsform-Paarung.')
+        const government = command.government ?? legacyGovernment(command.matchup, attachment.faction)
+        if (!isGovernment(government)) throw new Error('Ungültige Staatsform.')
         if (this.room.rematchProposal && this.room.rematchProposal.requestedBy !== attachment.faction) {
           throw new Error('Die andere Koalition hat bereits eine neue Partie vorgeschlagen.')
         }
-        this.room.rematchProposal = { requestedBy: attachment.faction, maxRounds: command.maxRounds, matchup: command.matchup }
+        this.room.rematchProposal = { requestedBy: attachment.faction, maxRounds: command.maxRounds, government }
         this.room.revision += 1
         await this.persist()
         this.broadcast()
@@ -213,7 +238,12 @@ export class GameRoom extends DurableObject<Env> {
         if (!this.room.rematchProposal || this.room.rematchProposal.requestedBy === attachment.faction) {
           throw new Error('Es gibt keinen gegnerischen Vorschlag zum Annehmen.')
         }
-        this.room.state = createInitialState(this.room.rematchProposal.maxRounds, this.room.rematchProposal.matchup)
+        const acceptingGovernment = command.government ?? this.room.state.governments[attachment.faction]
+        if (!isGovernment(acceptingGovernment)) throw new Error('Ungültige Staatsform.')
+        const governments = { ...this.room.state.governments }
+        governments[this.room.rematchProposal.requestedBy] = this.room.rematchProposal.government
+        governments[attachment.faction] = acceptingGovernment
+        this.room.state = createInitialState(this.room.rematchProposal.maxRounds, governments)
         this.room.status = 'playing'
         this.room.rematchProposal = undefined
         this.room.revision += 1
@@ -268,17 +298,17 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url)
     if (url.pathname === '/api/rooms' && request.method === 'POST') {
-      const body = await request.json<{ maxRounds?: RoundCount; matchup?: MatchupId }>().catch((): { maxRounds?: RoundCount; matchup?: MatchupId } => ({}))
+      const body = await request.json<{ maxRounds?: RoundCount; blueGovernment?: GovernmentType; matchup?: string }>().catch((): { maxRounds?: RoundCount; blueGovernment?: GovernmentType; matchup?: string } => ({}))
       const maxRounds = body.maxRounds ?? 6
-      const matchup = body.matchup ?? 'democracy-democracy'
+      const blueGovernment = body.blueGovernment ?? legacyGovernment(body.matchup, 'blue')
       if (![6, 12, 18].includes(maxRounds)) return json({ error: 'Ungültige Rundenzahl.' }, 400)
-      if (!['democracy-democracy', 'democracy-autocracy', 'autocracy-autocracy'].includes(matchup)) return json({ error: 'Ungültige Staatsform-Paarung.' }, 400)
+      if (!isGovernment(blueGovernment)) return json({ error: 'Ungültige Staatsform.' }, 400)
       for (let attempt = 0; attempt < 5; attempt += 1) {
         const code = roomCode()
         const response = await roomStub(env, code).fetch(new Request(new URL('/create', request.url), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ code, maxRounds, matchup }),
+          body: JSON.stringify({ code, maxRounds, blueGovernment }),
         }))
         if (response.status !== 409) return response
       }
