@@ -333,10 +333,10 @@ const getFactionMapTotals = (state: GameState, faction: FactionId) => REGION_ORD
   { presence: 0, awareness: 0, access: 0, logistics: 0 },
 )
 
-const STANDARD_MAP_TRANSFORM = 'translate(-45 0) scale(1.1 1)'
-const CINEMATIC_MAP_TRANSFORM = 'translate(-52.5 -20) scale(1.45 .75)'
-const getMapX = (x: number, cinematic: boolean) => cinematic ? 600 + (x - 450) * 1.45 : 450 + (x - 450) * 1.1
-const getMapY = (y: number, cinematic: boolean) => cinematic ? y * .75 - 20 : y
+const STANDARD_MAP_TRANSFORM = 'scale(1 1)'
+const CINEMATIC_MAP_TRANSFORM = 'scale(1.3333333333 .7924528302)'
+const getMapX = (x: number, cinematic: boolean) => cinematic ? x * 4 / 3 : x
+const getMapY = (y: number, cinematic: boolean) => cinematic ? y * 420 / 530 : y
 
 interface MapBoardProps {
   state: GameState
@@ -431,47 +431,20 @@ const MapBoard = ({
       <div className="map-stage" ref={mapStageRef}>
         <svg className={`strategy-map ${cinematicMap ? 'is-cinematic' : 'is-standard'}`} viewBox={mapViewBox} role="img" aria-label={pick(language, 'Fiktive maritime Karte mit neun Regionen und vier Sea Lines of Communication', 'Fictional maritime map with nine regions and four Sea Lines of Communication')}>
           <defs>
-            <linearGradient id="sea" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0" stopColor="#e9e4d6" />
-              <stop offset="0.52" stopColor="#dce3df" />
-              <stop offset="1" stopColor="#cbd8d8" />
-            </linearGradient>
-            <linearGradient id="land" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0" stopColor="#ded0aa" />
-              <stop offset="0.55" stopColor="#c5b48d" />
-              <stop offset="1" stopColor="#9d8d69" />
-            </linearGradient>
-            <pattern id="landTexture" width="14" height="14" patternUnits="userSpaceOnUse">
-              <path d="M-2 11 C3 7 8 7 16 2 M-4 4 C2 0 8 1 14-3" fill="none" stroke="#735f3f" strokeOpacity=".11" strokeWidth=".8" />
-            </pattern>
-            <pattern id="chartGrid" width="30" height="30" patternUnits="userSpaceOnUse">
-              <path d="M30 0H0V30" fill="none" stroke="#284d61" strokeOpacity=".09" strokeWidth=".7" />
-            </pattern>
             <pattern id="deniedPattern" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
               <line x1="0" y1="0" x2="0" y2="8" stroke="#9d3434" strokeOpacity=".3" strokeWidth="2" />
             </pattern>
             <filter id="nodeShadow" x="-50%" y="-50%" width="200%" height="200%">
               <feDropShadow dx="0" dy="2" stdDeviation="3" floodColor="#071c2c" floodOpacity=".3" />
             </filter>
-            <filter id="landShadow" x="-20%" y="-20%" width="140%" height="140%">
-              <feDropShadow dx="0" dy="2" stdDeviation="4" floodColor="#203b47" floodOpacity=".24" />
-            </filter>
           </defs>
-          <rect width={cinematicMap ? 1200 : 900} height={cinematicMap ? 420 : 530} fill="url(#sea)" />
-          <rect width={cinematicMap ? 1200 : 900} height={cinematicMap ? 420 : 530} fill="url(#chartGrid)" />
-          <path className="bathymetry" transform={mapTransform} d="M-20 70 C160 135 224 50 383 95 S690 137 930 48" />
-          <path className="bathymetry" transform={mapTransform} d="M-10 392 C151 332 278 360 389 414 S693 490 920 401" />
-          <path className="bathymetry thin" transform={mapTransform} d="M54 0 C110 173 75 330 153 540 M770 -10 C712 161 758 349 690 540" />
-          <g className="map-land" filter="url(#landShadow)" transform={mapTransform}>
-            <path className="landmass coast-edge" d="M0 0 H154 C160 31 139 58 112 75 C83 94 69 126 43 143 C29 152 14 158 0 160 Z" />
-            <path className="landmass coast-edge" d="M900 0 H746 C740 31 761 58 788 75 C817 94 831 126 857 143 C871 152 886 158 900 160 Z" />
-            <path className="landmass continent" d="M168 164 C205 136 276 137 327 166 C374 193 387 231 363 267 C344 295 368 317 353 349 C333 391 287 407 248 386 C211 366 202 332 174 307 C142 278 139 208 168 164 Z" />
-            <path className="landmass continent" d="M732 164 C695 136 624 137 573 166 C526 193 513 231 537 267 C556 295 532 317 547 349 C567 391 613 407 652 386 C689 366 698 332 726 307 C758 278 761 208 732 164 Z" />
-            <path className="landmass freeport-island" d="M421 412 C433 393 460 389 477 403 C493 416 493 448 481 468 C469 487 438 490 422 472 C407 455 407 431 421 412 Z" />
-            <path className="land-texture" d="M168 164 C205 136 276 137 327 166 C374 193 387 231 363 267 C344 295 368 317 353 349 C333 391 287 407 248 386 C211 366 202 332 174 307 C142 278 139 208 168 164 Z M732 164 C695 136 624 137 573 166 C526 193 513 231 537 267 C556 295 532 317 547 349 C567 391 613 407 652 386 C689 366 698 332 726 307 C758 278 761 208 732 164 Z" />
-            <path className="coastline-detail" d="M178 174 C216 151 271 151 316 175 M181 297 C207 322 218 362 252 376 M722 174 C684 151 629 151 584 175 M719 297 C693 322 682 362 648 376" />
-            <path className="landmass islands" d="M469 74 l15 8 -7 14 -20 2 -8 -11 Z M405 320 l12 7 -5 13 -18 2 -7 -10 Z M807 397 l14 8 -5 14 -19 2 -8 -11 Z" />
-          </g>
+          <image
+            className="nautical-chart-image"
+            href="/images/pelagos-nautical-chart.png"
+            width={cinematicMap ? 1200 : 900}
+            height={cinematicMap ? 420 : 530}
+            preserveAspectRatio="none"
+          />
 
           {REGION_ORDER.map((regionId) => {
             const region = regionText(regionId, language)
@@ -512,6 +485,7 @@ const MapBoard = ({
             const usability = getUsability(state, regionId, state.activeFaction)
             const selected = inspected === regionId
             const valid = validRegions.includes(regionId)
+            const sideDetails = regionId === 'meridian_strait'
             return (
               <g
                 key={regionId}
@@ -524,12 +498,12 @@ const MapBoard = ({
                 <circle className="node-ring" r={region.chokepoint ? 29 : 25} />
                 <circle className="node-core" r={region.chokepoint ? 22 : 19} />
                 <text className="node-symbol" y="5">{region.chokepoint ? '◇' : region.market ? '¤' : '✦'}</text>
-                <text className="node-title" y={-34}>{region.shortName}</text>
+                <text className={`node-title ${sideDetails ? 'is-side' : ''}`} x={sideDetails ? 35 : 0} y={sideDetails ? -13 : region.y <= 60 ? -29 : -34}>{region.shortName}</text>
                 <text className="node-status" y={region.chokepoint ? 45 : 41}>{usabilityText(usability, language).short}</text>
-                <g transform="translate(-63 47)">
+                <g transform={sideDetails ? 'translate(34 4)' : 'translate(-63 47)'}>
                   <MapResourceRow state={state} regionId={regionId} faction="blue" />
                 </g>
-                <g transform="translate(-63 64)">
+                <g transform={sideDetails ? 'translate(34 21)' : 'translate(-63 64)'}>
                   <MapResourceRow state={state} regionId={regionId} faction="red" />
                 </g>
               </g>
@@ -688,7 +662,7 @@ const HelpDialog = ({ onClose }: { onClose: () => void }) => {
     >
       <section className="route-rules-dialog help-dialog">
         <header>
-          <div><span className="eyebrow">{pick(language, 'SPIELHILFE · VERSION 1.0.3', 'GAME HELP · VERSION 1.0.3')}</span><h2 id="help-title">{pick(language, 'Seewege führen', 'Command the Sea Lines')}</h2></div>
+          <div><span className="eyebrow">{pick(language, 'SPIELHILFE · VERSION 1.0.4', 'GAME HELP · VERSION 1.0.4')}</span><h2 id="help-title">{pick(language, 'Seewege führen', 'Command the Sea Lines')}</h2></div>
           <button type="button" onClick={onClose} aria-label={pick(language, 'Regelhilfe schließen', 'Close rules')}>×</button>
         </header>
 
@@ -1170,9 +1144,20 @@ const ChangelogDialog = ({ onClose }: { onClose: () => void }) => {
   }, [onClose])
   const entries = [
     {
+      version: '1.0.4',
+      title: pick(language, 'Realistische Seekarte', 'Realistic nautical chart'),
+      current: true,
+      items: [
+        pick(language, 'Eine entsättigte hydrographische Seekarte mit Tiefenlinien, zwei Küstenmassen und einer zentralen Freihafeninsel ersetzt den schematischen Kartenhintergrund.', 'A desaturated hydrographic chart with depth contours, two coastal landmasses, and a central Freeport island replaces the schematic map background.'),
+        pick(language, 'Westliches und östliches Heimatmeer liegen nun als maritime Ausgangsbasen unmittelbar an den jeweiligen Küsten.', 'The Western and Eastern home seas now sit directly on their respective coasts as maritime starting bases.'),
+        pick(language, 'Die getrennten Haupt-SLOCs führen über die nördlichen Passagen, das Zentralbecken und die Meridianstraße zum Freihafen.', 'The separated Main SLOCs lead through the northern passages, Central Basin, and Meridian Strait to Freeport.'),
+        pick(language, 'Die Ausweich-SLOCs umrunden die Landmassen vollständig über Wasser und passieren ihre südlichen Spitzen über den SW- beziehungsweise SO-Bogen.', 'The Detour SLOCs remain entirely at sea around the landmasses and pass their southern tips through the SW and SE Arcs.'),
+        pick(language, 'Kartenprojektion, Beschriftungen und Routenkontrast wurden für breite 16:9-Bildschirme neu abgestimmt.', 'Map projection, labels, and route contrast were retuned for wide 16:9 displays.'),
+      ],
+    },
+    {
       version: '1.0.3',
       title: pick(language, 'Strategisches Führungsbild', 'Strategic command layout'),
-      current: true,
       items: [
         pick(language, 'Die vergrößerte Seekarte nutzt den bisherigen linken Seitenbereich und rückt das maritime Lagebild stärker in den Mittelpunkt.', 'The enlarged maritime map now uses the former left sidebar and puts the strategic situation at the center.'),
         pick(language, 'Aktive Koalition, Staatsform, Initiative und Aktionspunkte stehen gemeinsam in einem zugabhängig blau oder rot gefärbten Lagebalken.', 'Active coalition, government, initiative, and action points now share a turn-dependent blue or red situation header.'),
@@ -1338,7 +1323,7 @@ const ModeSelection = ({ language, onLanguage, rounds, onRounds, governments, on
       </div>
       <header className="mode-brand">
         <span className="mode-brand-mark">✦</span>
-        <div><span>SEA LINES OF</span><strong>COMMUNICATION</strong><small>{pick(language, 'VERSION 1.0.3 · Strategisches Führungsbild', 'VERSION 1.0.3 · Strategic command layout')}</small></div>
+        <div><span>SEA LINES OF</span><strong>COMMUNICATION</strong><small>{pick(language, 'VERSION 1.0.4 · Realistische Seekarte', 'VERSION 1.0.4 · Realistic nautical chart')}</small></div>
       </header>
       <section className="mode-intro">
         <span className="eyebrow">{pick(language, 'EINSATZBEREITSCHAFT HERSTELLEN', 'ESTABLISH READINESS')}</span>

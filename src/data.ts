@@ -42,48 +42,48 @@ export const REGION_ORDER: RegionId[] = [
 export const REGIONS: Record<RegionId, RegionDefinition> = {
   western_sea: {
     id: 'western_sea', name: 'Westliches Randmeer', shortName: 'Randmeer West', subtitle: 'Ausgangsraum Blau',
-    x: 102, y: 248, coastal: true, neighbors: ['northwest_passage', 'southwest_arc'],
-    mapPath: 'M20 112 C77 75 154 92 185 151 L175 310 C123 340 65 321 24 285 Z',
+    x: 200, y: 145, coastal: true, neighbors: ['northwest_passage', 'southwest_arc'],
+    mapPath: 'M0 92 C63 75 145 91 205 139 L214 283 C159 333 70 344 0 306 Z',
   },
   eastern_sea: {
     id: 'eastern_sea', name: 'Östliches Randmeer', shortName: 'Randmeer Ost', subtitle: 'Ausgangsraum Rot',
-    x: 798, y: 248, coastal: true, neighbors: ['northeast_passage', 'southeast_arc'],
-    mapPath: 'M715 150 C754 91 831 78 881 115 L876 288 C831 325 772 336 724 307 Z',
+    x: 700, y: 145, coastal: true, neighbors: ['northeast_passage', 'southeast_arc'],
+    mapPath: 'M900 92 C837 75 755 91 695 139 L686 283 C741 333 830 344 900 306 Z',
   },
   northwest_passage: {
     id: 'northwest_passage', name: 'Nordwestliche Passage', shortName: 'NW-Passage', subtitle: 'Nördlicher Zugang',
-    x: 264, y: 120, coastal: true, neighbors: ['western_sea', 'central_basin'],
-    mapPath: 'M173 48 C246 15 339 43 360 111 L333 184 L181 160 Z',
+    x: 300, y: 70, coastal: true, neighbors: ['western_sea', 'central_basin'],
+    mapPath: 'M155 0 C241 0 352 12 410 42 L409 126 C324 145 233 135 171 106 Z',
   },
   northeast_passage: {
     id: 'northeast_passage', name: 'Nordöstliche Passage', shortName: 'NO-Passage', subtitle: 'Nördlicher Zugang',
-    x: 638, y: 120, coastal: true, neighbors: ['eastern_sea', 'central_basin'],
-    mapPath: 'M540 108 C571 41 664 18 728 50 L720 162 L567 185 Z',
+    x: 600, y: 70, coastal: true, neighbors: ['eastern_sea', 'central_basin'],
+    mapPath: 'M745 0 C659 0 548 12 490 42 L491 126 C576 145 667 135 729 106 Z',
   },
   central_basin: {
     id: 'central_basin', name: 'Zentrales Becken', shortName: 'Zentralbecken', subtitle: 'Operatives Scharnier',
-    x: 414, y: 238, coastal: false, neighbors: ['northwest_passage', 'northeast_passage', 'meridian_strait'],
-    mapPath: 'M330 164 L442 135 L526 184 L513 306 L404 333 L321 271 Z',
+    x: 450, y: 70, coastal: false, neighbors: ['northwest_passage', 'northeast_passage', 'meridian_strait'],
+    mapPath: 'M398 0 L502 0 L526 84 L498 137 L402 137 L374 84 Z',
   },
   meridian_strait: {
     id: 'meridian_strait', name: 'Meridianstraße', shortName: 'Meridianstraße', subtitle: 'Strategischer Engpass',
-    x: 552, y: 305, coastal: true, chokepoint: true, neighbors: ['central_basin', 'freeport_sea'],
-    mapPath: 'M503 242 C544 213 598 239 616 279 L599 361 L518 360 L493 310 Z',
+    x: 450, y: 220, coastal: true, chokepoint: true, neighbors: ['central_basin', 'freeport_sea'],
+    mapPath: 'M394 121 C426 105 474 105 506 121 L523 243 C500 277 400 277 377 243 Z',
   },
   southwest_arc: {
     id: 'southwest_arc', name: 'Südwestlicher Bogen', shortName: 'SW-Bogen', subtitle: 'Kostenintensive Umfahrung',
-    x: 250, y: 408, coastal: false, neighbors: ['western_sea', 'freeport_sea'],
-    mapPath: 'M104 334 C174 295 296 315 365 399 L336 500 L164 498 L91 425 Z',
+    x: 375, y: 448, coastal: false, neighbors: ['western_sea', 'freeport_sea'],
+    mapPath: 'M0 286 C93 309 185 344 258 390 C316 426 366 447 422 470 L402 530 L0 530 Z',
   },
   southeast_arc: {
     id: 'southeast_arc', name: 'Südöstlicher Bogen', shortName: 'SO-Bogen', subtitle: 'Kostenintensive Umfahrung',
-    x: 670, y: 408, coastal: false, neighbors: ['eastern_sea', 'freeport_sea'],
-    mapPath: 'M604 394 C672 315 786 299 842 349 L824 465 L735 507 L604 480 Z',
+    x: 525, y: 448, coastal: false, neighbors: ['eastern_sea', 'freeport_sea'],
+    mapPath: 'M900 286 C807 309 715 344 642 390 C584 426 534 447 478 470 L498 530 L900 530 Z',
   },
   freeport_sea: {
     id: 'freeport_sea', name: 'Freihafen-See', shortName: 'Freihafen', subtitle: 'Neutraler Wirtschaftsraum',
-    x: 452, y: 448, coastal: true, market: true, neighbors: ['meridian_strait', 'southwest_arc', 'southeast_arc'],
-    mapPath: 'M338 352 L467 331 L610 361 L601 491 L483 518 L337 491 Z',
+    x: 450, y: 325, coastal: true, market: true, neighbors: ['meridian_strait', 'southwest_arc', 'southeast_arc'],
+    mapPath: 'M347 245 C392 225 508 225 553 245 L578 389 C540 430 360 430 322 389 Z',
   },
 }
 
@@ -93,22 +93,22 @@ export const ROUTES: Record<RouteId, RouteDefinition> = {
   blue_main: {
     id: 'blue_main', faction: 'blue', name: 'Blaue Haupt-SLOC', kind: 'main', baseYield: 6,
     regions: ['western_sea', 'northwest_passage', 'central_basin', 'meridian_strait', 'freeport_sea'],
-    svgPath: 'M102 248 C140 184 203 124 264 120 C326 116 370 183 414 238 C463 251 515 274 552 305 C540 365 508 421 452 448',
+    svgPath: 'M200 145 C222 104 258 78 300 70 C350 70 402 70 444 70 L444 220 C414 239 379 263 382 286 C386 304 416 320 444 325',
   },
   blue_detour: {
     id: 'blue_detour', faction: 'blue', name: 'Blaue Ausweich-SLOC', kind: 'detour', baseYield: 3,
     regions: ['western_sea', 'southwest_arc', 'freeport_sea'],
-    svgPath: 'M102 248 C38 332 59 449 151 482 C195 498 232 459 250 408 C302 484 391 514 452 448',
+    svgPath: 'M200 145 C94 202 62 330 115 413 C176 487 302 489 375 448 C415 425 426 363 444 325',
   },
   red_main: {
     id: 'red_main', faction: 'red', name: 'Rote Haupt-SLOC', kind: 'main', baseYield: 6,
     regions: ['eastern_sea', 'northeast_passage', 'central_basin', 'meridian_strait', 'freeport_sea'],
-    svgPath: 'M798 248 C760 184 699 124 638 120 C574 116 478 184 414 238 C463 251 515 274 552 305 C540 365 508 421 452 448',
+    svgPath: 'M700 145 C678 104 642 78 600 70 C550 70 498 70 456 70 L456 220 C486 239 521 263 518 286 C514 304 484 320 456 325',
   },
   red_detour: {
     id: 'red_detour', faction: 'red', name: 'Rote Ausweich-SLOC', kind: 'detour', baseYield: 3,
     regions: ['eastern_sea', 'southeast_arc', 'freeport_sea'],
-    svgPath: 'M798 248 C862 332 841 449 749 482 C705 498 682 459 670 408 C602 484 513 514 452 448',
+    svgPath: 'M700 145 C806 202 838 330 785 413 C724 487 598 489 525 448 C485 425 474 363 456 325',
   },
 }
 
