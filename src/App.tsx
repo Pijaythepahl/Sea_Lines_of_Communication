@@ -657,7 +657,7 @@ const HelpDialog = ({ onClose }: { onClose: () => void }) => {
     >
       <section className="route-rules-dialog help-dialog">
         <header>
-          <div><span className="eyebrow">{pick(language, 'SPIELHILFE · VERSION 1.01', 'GAME HELP · VERSION 1.01')}</span><h2 id="help-title">{pick(language, 'Seewege führen', 'Command the Sea Lines')}</h2></div>
+          <div><span className="eyebrow">{pick(language, 'SPIELHILFE · VERSION 1.0.2', 'GAME HELP · VERSION 1.0.2')}</span><h2 id="help-title">{pick(language, 'Seewege führen', 'Command the Sea Lines')}</h2></div>
           <button type="button" onClick={onClose} aria-label={pick(language, 'Regelhilfe schließen', 'Close rules')}>×</button>
         </header>
 
@@ -1130,6 +1130,122 @@ const EndGameDialog = ({ state, onNewGame, onMainMenu }: { state: GameState; onN
   )
 }
 
+const ChangelogDialog = ({ onClose }: { onClose: () => void }) => {
+  const language = useLanguage()
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose() }
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  }, [onClose])
+  const entries = [
+    {
+      version: '1.0.2',
+      title: pick(language, 'Strategischere KI', 'More strategic AI'),
+      current: true,
+      items: [
+        pick(language, 'Staatsformen prägen nun sichtbar das KI-Verhalten: Demokratien schützen niedrige Eskalation, Autokratien nutzen kontrolliert das Fenster 3–5.', 'Governments now visibly shape AI behavior: democracies protect low Escalation while autocracies make controlled use of the 3–5 window.'),
+        pick(language, 'Die KI bewertet Zugang, Logistik, versorgte Vorposten, Ausweichrouten und Zwei-Felder-Verlegungen als zusammenhängende maritime Strategie.', 'The AI evaluates Access, Logistics, supplied outposts, detour routes, and two-region moves as one connected maritime strategy.'),
+        pick(language, 'Rundenfortschritt und Punktestand beeinflussen Investitionen, Risikobereitschaft und unmittelbaren Routendruck.', 'Round progress and the score now influence investment, risk appetite, and immediate route pressure.'),
+        pick(language, 'Dieser Änderungsverlauf macht kommende Verbesserungen direkt im Hauptmenü nachvollziehbar.', 'This changelog makes future improvements traceable directly from the main menu.'),
+      ],
+    },
+    {
+      version: '1.0.1',
+      title: pick(language, 'Freie Staatsformwahl', 'Independent government selection'),
+      items: [
+        pick(language, 'Blau und Rot wählen ihre Staatsform unabhängig voneinander – lokal, online und bei Revanchen.', 'Blue and Red choose their governments independently in local games, online rooms, and rematches.'),
+        pick(language, 'Online legt der Host Blau fest; Rot entscheidet nach Eingabe des Raumcodes und beide Seiten sehen vor dem Start ihre Gegenüberstellung.', 'Online, the host sets Blue; Red decides after entering the room code, and both sides see the matchup before play begins.'),
+        pick(language, 'Bestehende Spielstände und Online-Räume wurden auf die freie Auswahl migriert.', 'Existing saves and online rooms were migrated to independent selection.'),
+      ],
+    },
+    {
+      version: '1.0',
+      title: pick(language, 'Erste Vollversion', 'First full release'),
+      items: [
+        pick(language, 'Demokratie und Autokratie erhielten unterschiedliche wirtschaftliche Eskalationsfenster.', 'Democracy and autocracy received distinct economic Escalation windows.'),
+        pick(language, 'Vorausstationierung wurde an Heimatmeer oder versorgte Vorposten gebunden; Patrouillenverbände erhielten Zwei-Felder-Bewegung.', 'Forward Deployment was limited to home waters or supplied outposts; Patrol Groups gained two-region movement.'),
+        pick(language, 'Abstandsabhängige Führungswertung, vollständiges Operationslog, deutlicher Online-Zugwechsel und dynamische SLOC-Flüsse kamen hinzu.', 'Margin-based leadership ratings, the complete operations log, prominent online turn changes, and dynamic SLOC flows were added.'),
+        pick(language, 'Titel- und Eskalationsmusik, Audioeinstellungen sowie die vollständige deutsche und englische Oberfläche wurden veröffentlicht.', 'Title and Escalation music, audio controls, and the complete German and English interface were released.'),
+      ],
+    },
+    {
+      version: 'MVP 6',
+      title: pick(language, 'Komplettere Kampagnen', 'More complete campaigns'),
+      items: [
+        pick(language, 'Längere Partien erhielten zwei Karten je Zug, größere Decks und mehr Patrouillenverbände.', 'Longer games gained two cards per turn, larger decks, and more Patrol Groups.'),
+        pick(language, '„Zusätzliche Tonnage“ machte den dauerhaften Ausbau der Ausweich-SLOC zu einer eigenen Karte.', 'Additional Tonnage turned permanent Detour SLOC expansion into its own card.'),
+        pick(language, 'Freihafen-Sonderregeln, Online-Revanchen sowie das In-Game-Menü mit Hilfe und ausführlicher Führungswertung kamen hinzu.', 'Freeport rules, online rematches, and the in-game menu with help and detailed leadership ratings were added.'),
+        pick(language, 'Startablauf und strategische Karte wurden für den Übergang zur Vollversion überarbeitet.', 'The launch flow and strategic map were refined for the transition to the full release.'),
+      ],
+    },
+    {
+      version: 'MVP 5',
+      title: pick(language, 'Sprachen und variable Rundenzahl', 'Languages and variable game length'),
+      items: [
+        pick(language, 'Die vollständige Oberfläche wurde auf Deutsch und Englisch verfügbar.', 'The complete interface became available in German and English.'),
+        pick(language, 'Partien konnten erstmals über 6, 12 oder 18 Runden gespielt und online synchronisiert werden.', 'Games could be played over 6, 12, or 18 rounds for the first time, including online synchronization.'),
+        pick(language, 'Deckgröße und Führungswertung skalierten mit der gewählten Einsatzdauer.', 'Deck size and leadership ratings scaled with the selected campaign length.'),
+        pick(language, 'Vorausstationierung erhöhte neben Präsenz erstmals zeitweise auch das Lagebild.', 'Forward Deployment began raising Awareness as well as Presence.'),
+      ],
+    },
+    {
+      version: 'MVP 4',
+      title: pick(language, 'Resilienz und lokales PvP', 'Resilience and local PvP'),
+      items: [
+        pick(language, 'Pass-and-play mit geschützter Übergabe und getrenntem Spielstand ergänzte die Spielmodi.', 'Pass-and-play with protected handoff and a separate save joined the game modes.'),
+        pick(language, 'Ausweich-SLOC-Ausbau, Ruhebonus und Kontrollverlust bei Eskalation 8 erweiterten die wirtschaftliche Resilienz.', 'Detour SLOC expansion, the restraint bonus, and loss of control at Escalation 8 expanded economic resilience.'),
+        pick(language, 'Verdeckte Operationen wurden gleichzeitig vor der Wertung aufgelöst und blieben für die Gegenseite geheim.', 'Covert operations resolved simultaneously before evaluation and remained hidden from the opposing side.'),
+        pick(language, 'Die erste Führungswertung bewertete Ergebnis, Wirtschaft, Eskalation und Verantwortung.', 'The first leadership rating assessed result, economy, Escalation, and responsibility.'),
+      ],
+    },
+    {
+      version: 'MVP 3',
+      title: pick(language, 'KI und Online-Multiplayer', 'AI and online multiplayer'),
+      items: [
+        pick(language, 'Der Einzelspieler gegen die Rote KI wurde eingeführt.', 'Single player against the Red AI was introduced.'),
+        pick(language, 'Private Online-Räume erhielten sechsstellige Codes, getrennte Sitze und Wiederverbindung.', 'Private online rooms gained six-character codes, separate seats, and reconnection.'),
+        pick(language, 'Ein autoritativer Cloudflare-Spielstand prüfte Aktionen und synchronisierte die Partie über WebSockets.', 'An authoritative Cloudflare game state validated actions and synchronized the game through WebSockets.'),
+        pick(language, 'Gegnerische Kartenhände und Nachziehstapel wurden aus der jeweiligen Browseransicht entfernt.', 'Opposing hands and draw piles were removed from each browser view.'),
+      ],
+    },
+    {
+      version: 'MVP 2',
+      title: pick(language, 'Eskalation und Verantwortung', 'Escalation and responsibility'),
+      items: [
+        pick(language, 'Die gemeinsame Eskalationsleiter mit fünf Stufen und wirtschaftlichen Mali wurde eingeführt.', 'The shared five-band Escalation track and its economic penalties were introduced.'),
+        pick(language, 'Riskante Karten erzeugten erstmals eigene Eskalationsverantwortung.', 'Risky cards began creating individual Escalation responsibility.'),
+        pick(language, 'Ruhige Runden und Krisenkommunikation konnten die Eskalation wieder senken.', 'Quiet rounds and Crisis Communications could lower Escalation again.'),
+        pick(language, 'Cloudflare-Veröffentlichung und die Darstellung auf großen Bildschirmen wurden vorbereitet.', 'Cloudflare deployment and large-screen presentation were prepared.'),
+      ],
+    },
+    {
+      version: 'MVP 1',
+      title: pick(language, 'Der maritime Spielkern', 'The maritime game core'),
+      items: [
+        pick(language, 'Neun Regionen, vier Ressourcen und Haupt- sowie Ausweich-SLOCs bildeten die erste interaktive Seekarte.', 'Nine regions, four resources, and Main and Detour SLOCs formed the first interactive sea map.'),
+        pick(language, 'Blau und Rot spielten symmetrische 20-Karten-Decks über sechs Runden.', 'Blue and Red played symmetrical 20-card decks over six rounds.'),
+        pick(language, 'Präsenz, Lagebild, Zugang und Logistik bestimmten Projektion, Nutzbarkeit und Wirtschaftsertrag.', 'Presence, Awareness, Access, and Logistics determined Projection, usability, and economic Yield.'),
+        pick(language, 'Lokales abwechselndes Spiel, automatische Speicherung und erste Siegerregeln legten das Fundament.', 'Local alternating play, automatic saving, and the first victory rules established the foundation.'),
+      ],
+    },
+  ]
+  return <div className="modal-backdrop changelog-backdrop" role="dialog" aria-modal="true" aria-labelledby="changelog-title" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
+    <section className="route-rules-dialog changelog-dialog">
+      <header>
+        <div><span className="eyebrow">{pick(language, 'VERSIONSARCHIV', 'RELEASE ARCHIVE')}</span><h2 id="changelog-title">Changelog</h2></div>
+        <button type="button" onClick={onClose} aria-label={pick(language, 'Änderungsverlauf schließen', 'Close changelog')}>×</button>
+      </header>
+      <div className="changelog-list">
+        {entries.map((entry) => <article className={`changelog-entry ${entry.current ? 'is-current' : ''}`} key={entry.version}>
+          <div className="changelog-version"><strong>{entry.version}</strong>{entry.current && <small>{pick(language, 'Aktuell', 'Current')}</small>}</div>
+          <div><h3>{entry.title}</h3><ul>{entry.items.map((item) => <li key={item}>{item}</li>)}</ul></div>
+        </article>)}
+      </div>
+      <footer><button className="confirm-button" type="button" onClick={onClose}>{pick(language, 'Schließen', 'Close')}</button></footer>
+    </section>
+  </div>
+}
+
 interface ModeSelectionProps extends MusicSettingsProps {
   language: Language
   onLanguage: (language: Language) => void
@@ -1155,6 +1271,7 @@ const ModeSelection = ({ language, onLanguage, rounds, onRounds, governments, on
   const [launchMode, setLaunchMode] = useState<'singleplayer' | 'local-pvp' | 'online'>()
   const [joiningCode, setJoiningCode] = useState<string>()
   const [joinGovernment, setJoinGovernment] = useState<GovernmentType>('democracy')
+  const [showChangelog, setShowChangelog] = useState(false)
 
   const confirmLaunch = () => {
     if (launchMode === 'singleplayer') onSingleplayer(true)
@@ -1179,7 +1296,7 @@ const ModeSelection = ({ language, onLanguage, rounds, onRounds, governments, on
       </div>
       <header className="mode-brand">
         <span className="mode-brand-mark">✦</span>
-        <div><span>SEA LINES OF</span><strong>COMMUNICATION</strong><small>{pick(language, 'VERSION 1.01 · Freie Staatsformwahl', 'VERSION 1.01 · Free government selection')}</small></div>
+        <div><span>SEA LINES OF</span><strong>COMMUNICATION</strong><small>{pick(language, 'VERSION 1.0.2 · Strategischere KI', 'VERSION 1.0.2 · More strategic AI')}</small></div>
       </header>
       <section className="mode-intro">
         <span className="eyebrow">{pick(language, 'EINSATZBEREITSCHAFT HERSTELLEN', 'ESTABLISH READINESS')}</span>
@@ -1241,7 +1358,8 @@ const ModeSelection = ({ language, onLanguage, rounds, onRounds, governments, on
       </section>
       {busy && <div className="mode-status"><span className="waiting-signal"><i /><i /><i /></span> {pick(language, 'Verbindung wird hergestellt …', 'Establishing connection …')}</div>}
       {error && <div className="mode-error" role="alert">{formatError(error, language)}</div>}
-      <footer className="mode-footer"><span>6–18 {pick(language, 'Runden', 'Rounds')}</span><i /> <span>{pick(language, 'Keine Registrierung', 'No registration')}</span><i /> <span>{pick(language, 'Private Raumcodes', 'Private room codes')}</span></footer>
+      <footer className="mode-footer"><span>6–18 {pick(language, 'Runden', 'Rounds')}</span><i /> <span>{pick(language, 'Keine Registrierung', 'No registration')}</span><i /> <span>{pick(language, 'Private Raumcodes', 'Private room codes')}</span><i /> <button type="button" className="mode-changelog-button" aria-haspopup="dialog" onClick={() => setShowChangelog(true)}>Changelog</button></footer>
+      {showChangelog && <ChangelogDialog onClose={() => setShowChangelog(false)} />}
       {launchMode && (
         <div className="modal-backdrop launch-backdrop" role="dialog" aria-modal="true" aria-labelledby="round-selection-title">
           <section className={`round-selection-dialog ${launchMode === 'online' ? 'is-online' : ''}`}>

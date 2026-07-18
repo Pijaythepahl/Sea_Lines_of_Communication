@@ -35,4 +35,58 @@ describe('Rote KI', () => {
     const action = chooseAiAction(state)
     expect(action).toMatchObject({ type: 'play-card', play: { covert: true } })
   })
+
+  it('nutzt als Autokratie das Eskalationsfenster für einen versorgten Vorposten', () => {
+    const state = endTurn(createInitialState(6, { blue: 'democracy', red: 'autocracy' }))
+    state.escalation = 2
+    state.regions.central_basin.resources.red.access = 1
+    state.regions.central_basin.resources.red.logistics = 1
+    state.hands.red = [{ instanceId: 'red-ai-forward', cardId: 'forward_deployment' }]
+
+    expect(chooseAiAction(state)).toMatchObject({
+      type: 'play-card',
+      play: { instanceId: 'red-ai-forward', regions: ['central_basin'] },
+    })
+  })
+
+  it('überschreitet als Demokratie nicht ohne ausreichenden Nutzen ihr ruhiges Eskalationsfenster', () => {
+    const state = endTurn(createInitialState(6, { blue: 'democracy', red: 'democracy' }))
+    state.escalation = 2
+    state.regions.central_basin.resources.red.access = 1
+    state.regions.central_basin.resources.red.logistics = 1
+    state.hands.red = [{ instanceId: 'red-ai-forward', cardId: 'forward_deployment' }]
+
+    expect(chooseAiAction(state)).toBeNull()
+  })
+
+  it('hält als Autokratie Eskalation drei, statt den eigenen Bonus unnötig aufzugeben', () => {
+    const state = endTurn(createInitialState(6, { blue: 'democracy', red: 'autocracy' }))
+    state.escalation = 3
+    state.hands.red = [{ instanceId: 'red-ai-deescalation', cardId: 'deescalation_channel' }]
+
+    expect(chooseAiAction(state)).toBeNull()
+  })
+
+  it('nutzt eine gültige Zwei-Felder-Verlegung in einen strategischen Kernraum', () => {
+    const state = endTurn(createInitialState())
+    state.regions.northeast_passage.resources.red.presence = 0
+    state.hands.red = [{ instanceId: 'red-ai-patrol', cardId: 'patrol_group' }]
+
+    expect(chooseAiAction(state)).toMatchObject({
+      type: 'play-card',
+      play: { instanceId: 'red-ai-patrol', regions: ['eastern_sea', 'central_basin'] },
+    })
+  })
+
+  it('vervollständigt früh eine maritime Zugang-Logistik-Kette', () => {
+    const state = endTurn(createInitialState(6, { blue: 'democracy', red: 'autocracy' }))
+    state.regions.freeport_sea.resources.red.access = 0
+    state.regions.central_basin.resources.red.access = 1
+    state.hands.red = [{ instanceId: 'red-ai-base', cardId: 'forward_base' }]
+
+    expect(chooseAiAction(state)).toMatchObject({
+      type: 'play-card',
+      play: { instanceId: 'red-ai-base', regions: ['central_basin'] },
+    })
+  })
 })
