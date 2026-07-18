@@ -1,6 +1,14 @@
 # Sea Lines of Communication
 
-Rundenbasiertes maritimes Strategiespiel für Desktop und Laptop. Version 1.0.2 bietet eine vollständig deutsch- und englischsprachige Oberfläche, variable Einsatzdauer sowie Einzelspieler, lokales Pass-and-play und private Online-Partien.
+Rundenbasiertes maritimes Strategiespiel für Desktop und Laptop. Version 1.0.3 bietet eine vollständig deutsch- und englischsprachige Oberfläche, variable Einsatzdauer sowie Einzelspieler, lokales Pass-and-play und private Online-Partien.
+
+## Version 1.0.3
+
+- Die vergrößerte Seekarte nutzt den bisherigen linken Seitenbereich; die Kartenhand endet weiterhin vor der rechten Informationsspalte.
+- Aktive Koalition, Staatsform, Initiative und Aktionspunkte sind in einem zugabhängig blau oder rot gefärbten strategischen Lagebalken zusammengeführt.
+- Ein kompakter Übersichtsbalken zeigt Präsenz, Lagebild, Zugang, Logistik und Engpasskontrolle der aktiven Seite.
+- Wirtschaftsertrag, SLOC-Prognosen und das vollständige Operationslog stehen gemeinsam in der rechten Spalte.
+- Die aktuell ertragbringende SLOC wird auf der Karte durchgezogen hervorgehoben; Reserve- und blockierte Routen werden gestrichelt dargestellt.
 
 ## Version 1.0.2
 
@@ -54,7 +62,7 @@ Rundenbasiertes maritimes Strategiespiel für Desktop und Laptop. Version 1.0.2 
 - WebSockets synchronisieren Karte, Ausbau, Zugwechsel und Verbindungsstatus in Echtzeit.
 - Gegnerische Hände, Decks, Abwurfdetails und geheime Aufträge werden nicht übertragen.
 
-## Regeln in Version 1.0.2
+## Regeln in Version 1.0.3
 
 - Ausweich-SLOCs starten bei Kapazität 3 und können mit den beiden Karten „Zusätzliche Tonnage“ dauerhaft bis 5 ausgebaut werden.
 - Eine friedliche Seite mit mindestens 1 Rest-AP erhält bei der Wertung +1 Ruhebonus.

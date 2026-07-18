@@ -321,6 +321,18 @@ const MapResourceRow = ({ state, faction, regionId }: { state: GameState; factio
   )
 }
 
+const getFactionMapTotals = (state: GameState, faction: FactionId) => REGION_ORDER.reduce(
+  (sum, regionId) => {
+    const resources = getEffectiveResources(state, regionId, faction)
+    sum.presence += resources.presence
+    sum.awareness += resources.awareness
+    sum.access += resources.access
+    sum.logistics += resources.logistics
+    return sum
+  },
+  { presence: 0, awareness: 0, access: 0, logistics: 0 },
+)
+
 interface MapBoardProps {
   state: GameState
   inspected: RegionId
@@ -344,12 +356,32 @@ const MapBoard = ({
 }: MapBoardProps) => {
   const language = useLanguage()
   const chokepoint = evaluateChokepoint(state)
+  const active = state.activeFaction
+  const activeTotals = getFactionMapTotals(state, active)
+  const scoringRoutes = new Set<RouteId>()
+  for (const faction of ['blue', 'red'] as const) {
+    const forecastAp = faction === active ? state.actionPoints : state.endedActionPoints[faction]
+    const best = calculateRoundYield(state, faction, { actionPoints: forecastAp })
+    if (best.routeId && !best.blocked && best.yield > 0) scoringRoutes.add(best.routeId)
+  }
   return (
     <section className="map-panel" aria-label={pick(language, 'Strategische Seekarte', 'Strategic maritime map')}>
-      <div className="map-heading">
-        <div>
-          <span className="eyebrow">{pick(language, 'OPERATIVES LAGEBILD', 'OPERATIONAL PICTURE')}</span>
+      <div className={`map-heading ${factionClass(active)}`}>
+        <div className="map-heading-title">
+          <span className="eyebrow">{pick(language, 'STRATEGISCHES LAGEBILD', 'STRATEGIC SITUATION')}</span>
           <h2>Pelagos-Archipel</h2>
+        </div>
+        <div className="map-active-coalition">
+          <span className="faction-seal" aria-hidden="true">{factionText(active, language).symbol}</span>
+          <div>
+            <span className="eyebrow">{pick(language, 'AKTIVE KOALITION', 'ACTIVE COALITION')}</span>
+            <strong>{factionText(active, language).name}</strong>
+            <small>{governmentText(state.governments[active], language).name} · {state.turnIndex === 0 ? pick(language, 'Erste Initiative', 'First initiative') : pick(language, 'Reaktion', 'Response')} · {pick(language, 'Runde', 'Round')} {state.round}</small>
+          </div>
+          <div className="map-action-points" aria-label={`${state.actionPoints} ${pick(language, 'Aktionspunkte verbleibend', 'action points remaining')}`}>
+            <span>{pick(language, 'AKTIONSPUNKTE', 'ACTION POINTS')}</span>
+            <div>{[1, 2, 3].map((value) => <i key={value} className={value <= state.actionPoints ? 'filled' : ''}>{value <= state.actionPoints ? '●' : '○'}</i>)}</div>
+          </div>
         </div>
         <div className="map-legend-stack">
           <div className="map-legend" aria-label={pick(language, 'Statuslegende', 'Status legend')}>
@@ -360,6 +392,25 @@ const MapBoard = ({
           <div className="map-resource-key" aria-label={pick(language, 'Ressourcenlegende', 'Resource legend')}>
             {RESOURCE_ORDER.map((resource) => <span key={resource}><ResourceIcon resource={resource} />{resourceText(resource, language).name}</span>)}
           </div>
+        </div>
+      </div>
+      <div className={`strategic-overview ${factionClass(active)}`}>
+        <div className="strategic-overview-title">
+          <span className="eyebrow">{pick(language, 'ÜBERSICHT', 'OVERVIEW')}</span>
+          <strong>{factionText(active, language).adjective}</strong>
+        </div>
+        <div className="strategic-overview-resources">
+          {RESOURCE_ORDER.map((resource) => (
+            <span key={resource}>
+              <ResourceIcon resource={resource} />
+              <small>{resourceText(resource, language).name}</small>
+              <b>{activeTotals[resource]}</b>
+            </span>
+          ))}
+        </div>
+        <div className="strategic-overview-choke">
+          <span>{pick(language, 'Engpass', 'Chokepoint')}</span>
+          <strong>{chokepoint ? factionText(chokepoint, language).adjective : pick(language, 'offen', 'open')}</strong>
         </div>
       </div>
       <div className="map-stage">
@@ -432,7 +483,7 @@ const MapBoard = ({
               : Math.max(0, Math.min(1, operationalYield / state.routeCapacity[routeId]))
             const flowDuration = 5.2 - flowRatio * 3.4
             return (
-              <g key={routeId} className={`map-route ${factionClass(route.faction)} ${route.kind} ${result.blocked ? 'blocked' : ''} ${flowRatio > 0 ? 'flowing' : 'flow-stopped'} ${valid ? 'valid-route' : ''} ${selectedRoute === routeId ? 'selected-route' : ''}`}>
+              <g key={routeId} className={`map-route ${factionClass(route.faction)} ${route.kind} ${scoringRoutes.has(routeId) ? 'earning-route' : 'reserve-route'} ${result.blocked ? 'blocked' : ''} ${flowRatio > 0 ? 'flowing' : 'flow-stopped'} ${valid ? 'valid-route' : ''} ${selectedRoute === routeId ? 'selected-route' : ''}`}>
                 <path className="route-hitbox" d={route.svgPath} onClick={() => onRouteClick(routeId)} />
                 <path className="route-line" d={route.svgPath} />
                 <path className="route-flow" d={route.svgPath} pathLength="100" style={{ animationDuration: `${flowDuration}s` }} />
@@ -483,8 +534,8 @@ const MapBoard = ({
           </strong>
         </div>
         <div className="sloc-legend" aria-label={pick(language, 'Legende der Seewege', 'Sea line legend')}>
-          <span><i className="main-line" />{pick(language, 'Haupt-SLOC · direkter', 'Main SLOC · more direct')}</span>
-          <span><i className="detour-line" />{pick(language, 'Ausweich-SLOC · länger', 'Detour SLOC · longer')}</span>
+          <span><i className="earning-line" />{pick(language, 'Ertragbringende SLOC', 'Scoring SLOC')}</span>
+          <span><i className="reserve-line" />{pick(language, 'Ausweichroute / blockiert', 'Reserve route / blocked')}</span>
         </div>
         <RegionInspector state={state} regionId={inspected} />
       </div>
@@ -525,56 +576,19 @@ const RegionInspector = ({ state, regionId }: { state: GameState; regionId: Regi
   )
 }
 
-const Sidebar = ({ state }: { state: GameState }) => {
+const OperationsLog = ({ state }: { state: GameState }) => {
   const language = useLanguage()
-  const active = state.activeFaction
-  const choke = evaluateChokepoint(state)
-  const totals = (faction: FactionId) => REGION_ORDER.reduce(
-    (sum, id) => {
-      const resources = getEffectiveResources(state, id, faction)
-      sum.presence += resources.presence
-      sum.awareness += resources.awareness
-      sum.access += resources.access
-      sum.logistics += resources.logistics
-      return sum
-    },
-    { presence: 0, awareness: 0, access: 0, logistics: 0 },
-  )
-  const activeTotals = totals(active)
   return (
-    <aside className="left-sidebar">
-      <section className={`command-card ${factionClass(active)}`}>
-        <span className="eyebrow">{pick(language, 'AKTIVE KOALITION', 'ACTIVE COALITION')}</span>
-        <div className="faction-lockup"><span className="faction-seal">{factionText(active, language).symbol}</span><div><h2>{factionText(active, language).name}</h2><p>{governmentText(state.governments[active], language).name} · {state.turnIndex === 0 ? pick(language, 'Erste Initiative', 'First initiative') : pick(language, 'Reaktion', 'Response')} · {pick(language, 'Runde', 'Round')} {state.round}</p></div></div>
-        <div className="ap-display" aria-label={`${state.actionPoints} ${pick(language, 'Aktionspunkte verbleibend', 'action points remaining')}`}>
-          <span>{pick(language, 'AKTIONSPUNKTE', 'ACTION POINTS')}</span>
-          <div>{[1, 2, 3].map((value) => <i key={value} className={value <= state.actionPoints ? 'filled' : ''}>{value <= state.actionPoints ? '●' : '○'}</i>)}</div>
-        </div>
-      </section>
-
-      <section className="panel resource-overview">
-        <div className="panel-heading"><span>{pick(language, 'Strategische Lage', 'Strategic Situation')}</span><small>{pick(language, 'Summen auf der Karte', 'Map totals')}</small></div>
-        {RESOURCE_ORDER.map((resource) => (
-          <div className="resource-row" key={resource}>
-            <span className="resource-icon"><ResourceIcon resource={resource} /></span>
-            <span>{resourceText(resource, language).name}</span>
-            <strong>{activeTotals[resource]}</strong>
-          </div>
+    <section className="panel log-panel">
+      <div className="panel-heading"><span>{pick(language, 'Operationslog', 'Operations Log')}</span><small>{pick(language, 'letzte Meldungen', 'latest reports')}</small></div>
+      <ol>
+        {state.log.map((entry) => (
+          <li key={entry.id} className={entry.faction ? factionClass(entry.faction) : ''}>
+            <span>R{entry.round}</span><p>{formatLogEntry(entry, language)}</p>
+          </li>
         ))}
-        <div className="projection-note"><span>{pick(language, 'Engpass', 'Chokepoint')}</span><strong>{choke ? factionText(choke, language).adjective : pick(language, 'offen', 'open')}</strong></div>
-      </section>
-
-      <section className="panel log-panel">
-        <div className="panel-heading"><span>{pick(language, 'Operationslog', 'Operations Log')}</span><small>{pick(language, 'letzte Meldungen', 'latest reports')}</small></div>
-        <ol>
-          {state.log.map((entry) => (
-            <li key={entry.id} className={entry.faction ? factionClass(entry.faction) : ''}>
-              <span>R{entry.round}</span><p>{formatLogEntry(entry, language)}</p>
-            </li>
-          ))}
-        </ol>
-      </section>
-    </aside>
+      </ol>
+    </section>
   )
 }
 
@@ -634,6 +648,7 @@ const Scoreboard = ({ state, validRoutes, selectedRoute, onRouteClick }: Scorebo
         })}
       </div>
     </section>
+    <OperationsLog state={state} />
   </aside>
 }
 
@@ -657,7 +672,7 @@ const HelpDialog = ({ onClose }: { onClose: () => void }) => {
     >
       <section className="route-rules-dialog help-dialog">
         <header>
-          <div><span className="eyebrow">{pick(language, 'SPIELHILFE · VERSION 1.0.2', 'GAME HELP · VERSION 1.0.2')}</span><h2 id="help-title">{pick(language, 'Seewege führen', 'Command the Sea Lines')}</h2></div>
+          <div><span className="eyebrow">{pick(language, 'SPIELHILFE · VERSION 1.0.3', 'GAME HELP · VERSION 1.0.3')}</span><h2 id="help-title">{pick(language, 'Seewege führen', 'Command the Sea Lines')}</h2></div>
           <button type="button" onClick={onClose} aria-label={pick(language, 'Regelhilfe schließen', 'Close rules')}>×</button>
         </header>
 
@@ -1139,9 +1154,20 @@ const ChangelogDialog = ({ onClose }: { onClose: () => void }) => {
   }, [onClose])
   const entries = [
     {
+      version: '1.0.3',
+      title: pick(language, 'Strategisches Führungsbild', 'Strategic command layout'),
+      current: true,
+      items: [
+        pick(language, 'Die vergrößerte Seekarte nutzt den bisherigen linken Seitenbereich und rückt das maritime Lagebild stärker in den Mittelpunkt.', 'The enlarged maritime map now uses the former left sidebar and puts the strategic situation at the center.'),
+        pick(language, 'Aktive Koalition, Staatsform, Initiative und Aktionspunkte stehen gemeinsam in einem zugabhängig blau oder rot gefärbten Lagebalken.', 'Active coalition, government, initiative, and action points now share a turn-dependent blue or red situation header.'),
+        pick(language, 'Ein kompakter Übersichtsbalken zeigt Präsenz, Lagebild, Zugang, Logistik und den kontrollierten Engpass der aktiven Seite.', 'A compact overview bar shows Presence, Awareness, Access, Logistics, and chokepoint control for the active side.'),
+        pick(language, 'Wirtschaft, SLOC-Prognosen und das vollständige Operationslog sind in einer durchgängigen rechten Informationsspalte gebündelt.', 'Economy, SLOC forecasts, and the complete operations log are consolidated in a continuous right-hand information column.'),
+        pick(language, 'Auf der Karte wird die aktuell ertragbringende SLOC durchgezogen hervorgehoben; Reserve- und blockierte Routen erscheinen gestrichelt.', 'The currently scoring SLOC is highlighted with a solid line, while reserve and blocked routes are dashed.'),
+      ],
+    },
+    {
       version: '1.0.2',
       title: pick(language, 'Strategischere KI', 'More strategic AI'),
-      current: true,
       items: [
         pick(language, 'Staatsformen prägen nun sichtbar das KI-Verhalten: Demokratien schützen niedrige Eskalation, Autokratien nutzen kontrolliert das Fenster 3–5.', 'Governments now visibly shape AI behavior: democracies protect low Escalation while autocracies make controlled use of the 3–5 window.'),
         pick(language, 'Die KI bewertet Zugang, Logistik, versorgte Vorposten, Ausweichrouten und Zwei-Felder-Verlegungen als zusammenhängende maritime Strategie.', 'The AI evaluates Access, Logistics, supplied outposts, detour routes, and two-region moves as one connected maritime strategy.'),
@@ -1296,7 +1322,7 @@ const ModeSelection = ({ language, onLanguage, rounds, onRounds, governments, on
       </div>
       <header className="mode-brand">
         <span className="mode-brand-mark">✦</span>
-        <div><span>SEA LINES OF</span><strong>COMMUNICATION</strong><small>{pick(language, 'VERSION 1.0.2 · Strategischere KI', 'VERSION 1.0.2 · More strategic AI')}</small></div>
+        <div><span>SEA LINES OF</span><strong>COMMUNICATION</strong><small>{pick(language, 'VERSION 1.0.3 · Strategisches Führungsbild', 'VERSION 1.0.3 · Strategic command layout')}</small></div>
       </header>
       <section className="mode-intro">
         <span className="eyebrow">{pick(language, 'EINSATZBEREITSCHAFT HERSTELLEN', 'ESTABLISH READINESS')}</span>
@@ -1934,7 +1960,6 @@ function GameApp({ language, onLanguage }: { language: Language; onLanguage: (la
       </header>
 
       <main className="game-grid">
-        <Sidebar state={visibleState} />
         <MapBoard
           state={visibleState}
           inspected={inspected}
