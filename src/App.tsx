@@ -52,6 +52,7 @@ import {
   type RoomCommand,
   type RoomSnapshot,
 } from './multiplayer'
+import { getMusicTrackForEscalation, MUSIC_TRACKS } from './music'
 import type {
   CardInstance,
   CardPlay,
@@ -85,12 +86,8 @@ const MUSIC_VOLUME_KEY = 'sloc-music-volume-v1'
 const MUSIC_MUTED_KEY = 'sloc-music-muted-v1'
 const DEFAULT_MUSIC_VOLUME = 0.32
 const MUSIC_FADE_MS = 650
+// Ignore brief AI-driven jumps across the 2/3 and 5/6 thresholds.
 const MUSIC_TRACK_STABILITY_MS = 1000
-const MUSIC_TRACKS = {
-  title: '/audio/music/title-theme.ogg',
-  high: '/audio/music/escalation-high.ogg',
-  maximum: '/audio/music/escalation-maximum.ogg',
-} as const
 
 const loadMusicVolume = () => {
   try {
@@ -167,8 +164,8 @@ const useGameMusic = (track: string, volume: number) => {
 
       const step = (now: number) => {
         if (disposed) return
-        const progress = Math.min((now - startedAt) / MUSIC_FADE_MS, 1)
-        audio.volume = initialVolume + (target - initialVolume) * progress
+        const progress = Math.max(0, Math.min((now - startedAt) / MUSIC_FADE_MS, 1))
+        audio.volume = Math.max(0, Math.min(1, initialVolume + (target - initialVolume) * progress))
         if (progress < 1) {
           animationFrameRef.current = requestAnimationFrame(step)
           return
@@ -1148,6 +1145,7 @@ const ChangelogDialog = ({ onClose }: { onClose: () => void }) => {
       title: pick(language, 'Realistische Seekarte', 'Realistic nautical chart'),
       current: true,
       items: [
+        pick(language, 'Die Musik folgt nun den strategischen Eskalationsfenstern: Stabilität bei 0–2, kontrollierte Spannung bei 3–5 und maximale Krise bei 6–8.', 'Music now follows the strategic Escalation windows: stability at 0–2, controlled tension at 3–5, and maximum crisis at 6–8.'),
         pick(language, 'Eine entsättigte hydrographische Seekarte mit Tiefenlinien, zwei Küstenmassen und einer zentralen Freihafeninsel ersetzt den schematischen Kartenhintergrund.', 'A desaturated hydrographic chart with depth contours, two coastal landmasses, and a central Freeport island replaces the schematic map background.'),
         pick(language, 'Westliches und östliches Heimatmeer liegen nun als maritime Ausgangsbasen unmittelbar an den jeweiligen Küsten.', 'The Western and Eastern home seas now sit directly on their respective coasts as maritime starting bases.'),
         pick(language, 'Die getrennten Haupt-SLOCs führen über die nördlichen Passagen, das Zentralbecken und die Meridianstraße zum Freihafen.', 'The separated Main SLOCs lead through the northern passages, Central Basin, and Meridian Strait to Freeport.'),
@@ -1637,11 +1635,9 @@ function GameApp({ language, onLanguage }: { language: Language; onLanguage: (la
   const isLocalPvp = mode === 'local-pvp'
   const isPreGameMenu = mode === 'menu'
     || (isOnline && Boolean(onlineSession) && roomSnapshot?.status !== 'playing' && roomSnapshot?.status !== 'complete')
-  const desiredMusicTrack = isPreGameMenu || state.escalation <= 3
+  const desiredMusicTrack = isPreGameMenu
     ? MUSIC_TRACKS.title
-    : state.escalation === constants.MAX_ESCALATION
-      ? MUSIC_TRACKS.maximum
-      : MUSIC_TRACKS.high
+    : getMusicTrackForEscalation(state.escalation)
   const [musicTrack, setMusicTrack] = useState(desiredMusicTrack)
   useEffect(() => {
     if (desiredMusicTrack === musicTrack) return
