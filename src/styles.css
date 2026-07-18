@@ -553,6 +553,20 @@ button:focus-visible, [role="button"]:focus-visible { outline: 3px solid var(--b
 .mode-error { color: #ffd0c8; background: rgba(167,55,54,.28); border: 1px solid rgba(238,141,129,.6); }
 .mode-footer { position: relative; z-index: 1; display: flex; justify-content: center; align-items: center; gap: 11px; margin-top: 19px; color: #8198a3; font-size: 8px; font-weight: 800; letter-spacing: .11em; text-transform: uppercase; }
 .mode-footer i { width: 3px; height: 3px; background: var(--brass); transform: rotate(45deg); }
+.mode-changelog-button { padding: 3px 1px; color: var(--brass-light); background: transparent; border: 0; border-bottom: 1px solid rgba(215,184,121,.45); font: inherit; letter-spacing: inherit; text-transform: inherit; cursor: pointer; }
+.mode-changelog-button:hover { color: #fff; border-bottom-color: var(--brass-light); }
+
+.changelog-backdrop { z-index: 175; }
+.changelog-dialog { width: min(760px, 94vw); }
+.changelog-list { display: grid; gap: 12px; padding: 20px; }
+.changelog-entry { display: grid; grid-template-columns: 92px 1fr; gap: 18px; padding: 17px 18px; background: rgba(255,255,255,.38); border: 1px solid rgba(16,37,54,.15); border-left: 4px solid #8c9ba1; }
+.changelog-entry.is-current { background: rgba(21,71,96,.07); border-left-color: var(--blue); }
+.changelog-version { display: grid; align-content: start; gap: 6px; }
+.changelog-version strong { color: var(--navy-900); font-family: Georgia, serif; font-size: 23px; }
+.changelog-version small { width: fit-content; padding: 3px 6px; color: var(--ivory); background: var(--blue); font-size: 7px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
+.changelog-entry h3 { margin: 1px 0 8px; color: var(--navy-900); font-family: Georgia, serif; font-size: 17px; }
+.changelog-entry ul { display: grid; gap: 6px; margin: 0; padding-left: 17px; color: #53656d; font-size: 10px; line-height: 1.5; }
+.changelog-entry li::marker { color: var(--brass); }
 
 .launch-backdrop { z-index: 150; }
 .round-selection-dialog { width: min(680px, 92vw); max-height: 92vh; padding: 34px 38px 30px; color: var(--ink); text-align: center; background: linear-gradient(145deg, #faf7ed, #e3dcc9); border: 2px solid var(--brass); border-top: 6px solid var(--blue); box-shadow: 0 28px 80px rgba(0,0,0,.5), inset 0 0 0 5px rgba(9,37,55,.06); overflow-y: auto; }
@@ -699,6 +713,8 @@ button:focus-visible, [role="button"]:focus-visible { outline: 3px solid var(--b
   .language-switcher button { min-width: 40px; padding: 3px 6px; }
   .language-switcher button small { display: none; }
   .mode-card { min-height: 0; }
+  .mode-footer { flex-wrap: wrap; }
+  .changelog-entry { grid-template-columns: 1fr; gap: 8px; }
   .round-selection-dialog { padding: 28px 18px 22px; }
   .lobby-card { padding: 30px 18px; }
   .room-code { gap: 4px; }
