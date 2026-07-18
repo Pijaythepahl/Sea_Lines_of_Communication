@@ -483,6 +483,10 @@ const MapBoard = ({
             const selected = inspected === regionId
             const valid = validRegions.includes(regionId)
             const sideDetails = regionId === 'meridian_strait'
+            const southernDetails = regionId === 'southwest_arc' || regionId === 'southeast_arc'
+            const resourceX = regionId === 'southwest_arc' ? -153 : regionId === 'southeast_arc' ? 27 : -63
+            const blueResourceY = southernDetails ? -17 : 47
+            const redResourceY = southernDetails ? 0 : 64
             return (
               <g
                 key={regionId}
@@ -497,10 +501,10 @@ const MapBoard = ({
                 <text className="node-symbol" y="5">{region.chokepoint ? '◇' : region.market ? '¤' : '✦'}</text>
                 <text className={`node-title ${sideDetails ? 'is-side' : ''}`} x={sideDetails ? 35 : 0} y={sideDetails ? -13 : region.y <= 60 ? -29 : -34}>{region.shortName}</text>
                 <text className="node-status" y={region.chokepoint ? 45 : 41}>{usabilityText(usability, language).short}</text>
-                <g transform={sideDetails ? 'translate(34 4)' : 'translate(-63 47)'}>
+                <g transform={sideDetails ? 'translate(34 4)' : `translate(${resourceX} ${blueResourceY})`}>
                   <MapResourceRow state={state} regionId={regionId} faction="blue" />
                 </g>
-                <g transform={sideDetails ? 'translate(34 21)' : 'translate(-63 64)'}>
+                <g transform={sideDetails ? 'translate(34 21)' : `translate(${resourceX} ${redResourceY})`}>
                   <MapResourceRow state={state} regionId={regionId} faction="red" />
                 </g>
               </g>
