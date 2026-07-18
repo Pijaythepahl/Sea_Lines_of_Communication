@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   calculateLeadershipRating,
+  calculateProjection,
   calculateRoundYield,
   calculateRouteYield,
   createFactionView,
@@ -139,7 +140,7 @@ describe('Karten und Rundenfolge', () => {
     expect(getValidRegionTargets(state, 'patrol_group', ['western_sea'])).not.toContain('central_basin')
   })
 
-  it('verbessert beim Aufbau von Präsenz das Lagebild bis 2, aber nicht beim bloßen Verlegen', () => {
+  it('verbessert beim Aufbau dauerhaft und beim Verlegen nur temporär das Lagebild', () => {
     const state = createInitialState()
     const deployment = putCardInBlueHand(state, 'forward_deployment')
     const reinforced = playCard(state, { instanceId: deployment.instanceId, regions: ['western_sea'] })
@@ -149,6 +150,53 @@ describe('Karten und Rundenfolge', () => {
     const patrol = putCardInBlueHand(patrolState, 'patrol_group')
     const moved = playCard(patrolState, { instanceId: patrol.instanceId, regions: ['western_sea', 'southwest_arc'] })
     expect(moved.regions.southwest_arc.resources.blue).toMatchObject({ presence: 1, awareness: 0 })
+    expect(getEffectiveResources(moved, 'southwest_arc', 'blue').awareness).toBe(1)
+    expect(moved.patrolAwareness).toMatchObject([{ faction: 'blue', regionId: 'southwest_arc', expiresAfterRound: 1 }])
+
+    const nextRound = endTurn(endTurn(moved))
+    expect(getEffectiveResources(nextRound, 'southwest_arc', 'blue').awareness).toBe(0)
+    expect(nextRound.patrolAwareness).toEqual([])
+  })
+
+  it('stapelt Patrouillen-Lagebild nicht auf vorhandenes Lagebild', () => {
+    const state = createInitialState()
+    state.regions.southwest_arc.resources.blue.awareness = 1
+    const patrol = putCardInBlueHand(state, 'patrol_group')
+    const moved = playCard(state, { instanceId: patrol.instanceId, regions: ['western_sea', 'southwest_arc'] })
+    expect(getEffectiveResources(moved, 'southwest_arc', 'blue').awareness).toBe(1)
+    expect(moved.patrolAwareness).toEqual([])
+  })
+
+  it('nutzt Patrouillen-Lagebild für Projektion und verdeckte Folgeaktionen', () => {
+    const state = createInitialState()
+    state.regions.southwest_arc.resources.red.awareness = 1
+    const patrol = putCardInBlueHand(state, 'patrol_group')
+    const moved = playCard(state, { instanceId: patrol.instanceId, regions: ['western_sea', 'southwest_arc'] })
+    expect(calculateProjection(moved, 'southwest_arc', 'blue')).toBe(2)
+
+    const shadowing = putCardInBlueHand(moved, 'shadowing_operation')
+    const prepared = playCard(moved, { instanceId: shadowing.instanceId, regions: ['southwest_arc'], covert: true })
+    expect(prepared.covertOperations).toHaveLength(1)
+  })
+
+  it('lässt Beschattung temporäres Patrouillen-Lagebild aufheben', () => {
+    const state = createInitialState()
+    const patrol = putCardInBlueHand(state, 'patrol_group')
+    const moved = playCard(state, { instanceId: patrol.instanceId, regions: ['western_sea', 'southwest_arc'] })
+    moved.activeFaction = 'red'
+    moved.turnIndex = 1
+    moved.actionPoints = 3
+    moved.regions.southwest_arc.resources.red.awareness = 1
+    let shadowing = moved.hands.red.find((card) => card.cardId === 'shadowing_operation')
+    if (!shadowing) {
+      const deckIndex = moved.decks.red.findIndex((card) => card.cardId === 'shadowing_operation')
+      shadowing = moved.decks.red.splice(deckIndex, 1)[0]
+      moved.hands.red.push(shadowing)
+    }
+
+    const shadowed = playCard(moved, { instanceId: shadowing.instanceId, regions: ['southwest_arc'] })
+    expect(getEffectiveResources(shadowed, 'southwest_arc', 'blue').awareness).toBe(0)
+    expect(shadowed.patrolAwareness).toEqual([])
   })
 
   it('begrenzt den Lagebildbonus aus Präsenzaufbau auf 2', () => {
@@ -157,6 +205,14 @@ describe('Karten und Rundenfolge', () => {
     const deployment = putCardInBlueHand(state, 'forward_deployment')
     const reinforced = playCard(state, { instanceId: deployment.instanceId, regions: ['western_sea'] })
     expect(reinforced.regions.western_sea.resources.blue.awareness).toBe(2)
+  })
+
+  it('reduziert vorhandenes Lagebild 3 durch Vorausstationierung nicht', () => {
+    const state = createInitialState()
+    state.regions.western_sea.resources.blue.awareness = 3
+    const deployment = putCardInBlueHand(state, 'forward_deployment')
+    const reinforced = playCard(state, { instanceId: deployment.instanceId, regions: ['western_sea'] })
+    expect(reinforced.regions.western_sea.resources.blue).toMatchObject({ presence: 3, awareness: 3 })
   })
 
   it('suspendiert gegnerische Ressourcen nur bis zur nächsten Wirtschaftsauswertung', () => {
@@ -312,19 +368,31 @@ describe('Migration und Abschlussbewertung', () => {
     }
   })
 
-  it('migriert ältere Spielstände auf Version 8, sechs Runden und freie Staatsformen', () => {
+  it('migriert ältere Spielstände auf Version 9, sechs Runden und freie Staatsformen', () => {
     const legacy = structuredClone(createInitialState()) as unknown as Record<string, unknown>
     legacy.version = 4
     delete legacy.maxRounds
     delete legacy.routeCapacity
     delete legacy.covertOperations
     const migrated = migrateGameState(legacy)
-    expect(migrated.version).toBe(8)
+    expect(migrated.version).toBe(9)
     expect(migrated.maxRounds).toBe(6)
     expect(migrated.governments).toEqual({ blue: 'democracy', red: 'democracy' })
     expect('matchup' in migrated).toBe(false)
     expect(migrated.routeCapacity).toMatchObject({ blue_main: 6, blue_detour: 3 })
     expect(migrated.covertOperations).toEqual([])
+    expect(migrated.patrolAwareness).toEqual([])
+  })
+
+  it('migriert Version 8 ohne Karten oder Verlauf neu zu mischen', () => {
+    const legacy = structuredClone(createInitialState()) as any
+    legacy.version = 8
+    delete legacy.patrolAwareness
+    const deckOrder = legacy.decks.blue.map((card: CardInstance) => card.instanceId)
+    const migrated = migrateGameState(legacy)
+    expect(migrated.version).toBe(9)
+    expect(migrated.patrolAwareness).toEqual([])
+    expect(migrated.decks.blue.map((card) => card.instanceId)).toEqual(deckOrder)
   })
 
   it('übernimmt die Staatsformen eines Version-7-Spielstands', () => {

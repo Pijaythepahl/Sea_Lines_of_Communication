@@ -126,6 +126,12 @@ const strategicPlayBonus = (state: GameState, play: CardPlay, card: CardInstance
   const target = play.regions?.at(-1)
   const handPressure = Math.max(0, state.hands[faction].length - 5) * 0.3
   const futureRounds = Math.max(0, state.maxRounds - state.round)
+  const anchoredPatrolAwareness = (play.regions ?? []).filter((regionId) =>
+    state.patrolAwareness.some((entry) => entry.faction === faction && entry.regionId === regionId),
+  ).length
+  if ((card.cardId === 'isr_recon' || card.cardId === 'persistent_sensors') && anchoredPatrolAwareness > 0) {
+    return anchoredPatrolAwareness * (1 + futureRounds * 0.4) + handPressure
+  }
   if (card.cardId === 'forward_deployment' && target && target !== HOME_REGIONS[faction] && hasSupplyConnection(state, target, faction)) {
     return 1.5 + futureRounds * 0.9 + handPressure
   }

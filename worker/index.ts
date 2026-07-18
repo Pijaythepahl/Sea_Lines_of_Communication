@@ -57,7 +57,7 @@ export class GameRoom extends DurableObject<Env> {
     super(ctx, env)
     this.ready = ctx.blockConcurrencyWhile(async () => {
       this.room = await ctx.storage.get<RoomRecord>('room') ?? null
-      if (this.room && this.room.state.version !== 8) {
+      if (this.room && this.room.state.version !== 9) {
         this.room.state = migrateGameState(this.room.state)
         const legacyProposal = this.room.rematchProposal as (RoomRecord['rematchProposal'] & { matchup?: string }) | undefined
         if (legacyProposal && !isGovernment(legacyProposal.government)) {

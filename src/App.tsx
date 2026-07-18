@@ -15,6 +15,7 @@ import {
   evaluateChokepoint,
   getEffectiveResources,
   getEscalationBand,
+  hasPatrolAwareness,
   getUsability,
   getValidHybridResources,
   getValidRegionTargets,
@@ -67,8 +68,10 @@ import type {
   SuspendableResource,
 } from './types'
 
-const STORAGE_KEY = 'sloc-game-v8'
-const LOCAL_PVP_STORAGE_KEY = 'sloc-local-pvp-v8'
+const STORAGE_KEY = 'sloc-game-v9'
+const LOCAL_PVP_STORAGE_KEY = 'sloc-local-pvp-v9'
+const V8_STORAGE_KEY = 'sloc-game-v8'
+const V8_LOCAL_PVP_STORAGE_KEY = 'sloc-local-pvp-v8'
 const V7_STORAGE_KEY = 'sloc-game-v7'
 const V7_LOCAL_PVP_STORAGE_KEY = 'sloc-local-pvp-v7'
 const V6_STORAGE_KEY = 'sloc-game-v6'
@@ -220,8 +223,8 @@ const loadState = (storageKey = STORAGE_KEY): GameState => {
   try {
     const raw = localStorage.getItem(storageKey)
       ?? (storageKey === STORAGE_KEY
-        ? localStorage.getItem(V7_STORAGE_KEY) ?? localStorage.getItem(V6_STORAGE_KEY) ?? localStorage.getItem(V5_STORAGE_KEY) ?? localStorage.getItem(V4_STORAGE_KEY) ?? localStorage.getItem(V3_STORAGE_KEY) ?? localStorage.getItem(V2_STORAGE_KEY) ?? localStorage.getItem(LEGACY_STORAGE_KEY)
-        : storageKey === LOCAL_PVP_STORAGE_KEY ? localStorage.getItem(V7_LOCAL_PVP_STORAGE_KEY) ?? localStorage.getItem(V6_LOCAL_PVP_STORAGE_KEY) ?? localStorage.getItem(V5_LOCAL_PVP_STORAGE_KEY) ?? localStorage.getItem(V4_LOCAL_PVP_STORAGE_KEY) : null)
+        ? localStorage.getItem(V8_STORAGE_KEY) ?? localStorage.getItem(V7_STORAGE_KEY) ?? localStorage.getItem(V6_STORAGE_KEY) ?? localStorage.getItem(V5_STORAGE_KEY) ?? localStorage.getItem(V4_STORAGE_KEY) ?? localStorage.getItem(V3_STORAGE_KEY) ?? localStorage.getItem(V2_STORAGE_KEY) ?? localStorage.getItem(LEGACY_STORAGE_KEY)
+        : storageKey === LOCAL_PVP_STORAGE_KEY ? localStorage.getItem(V8_LOCAL_PVP_STORAGE_KEY) ?? localStorage.getItem(V7_LOCAL_PVP_STORAGE_KEY) ?? localStorage.getItem(V6_LOCAL_PVP_STORAGE_KEY) ?? localStorage.getItem(V5_LOCAL_PVP_STORAGE_KEY) ?? localStorage.getItem(V4_LOCAL_PVP_STORAGE_KEY) : null)
     if (!raw) return createInitialState()
     const parsed = JSON.parse(raw) as GameState
     if (!parsed.regions?.central_basin || !parsed.hands?.blue) return createInitialState()
@@ -298,19 +301,36 @@ const CardIcon = ({ cardId }: { cardId: CardInstance['cardId'] }) => {
   return resource ? <ResourceIcon resource={resource} /> : <>{CARDS[cardId].icon}</>
 }
 
+const BrandEmblem = () => <svg className="brand-emblem" viewBox="0 0 124 72" aria-hidden="true">
+  <path className="brand-emblem-frame" d="M2 2H120L94 28L106 36L94 44L120 70H2Z" />
+  <path className="brand-emblem-divider" d="M48 2v68" />
+  <path className="brand-emblem-route" d="M48 19c18-7 32-2 48 11M48 36c18 0 31 0 49 0M48 53c18 7 32 2 48-11" />
+  <circle className="brand-emblem-node" cx="71" cy="18" r="4" />
+  <circle className="brand-emblem-node" cx="86" cy="49" r="4" />
+  <path className="brand-emblem-rose-dark" d="M25 10l5 20 14 6-14 5-5 21-5-21-14-5 14-6Z" />
+  <path className="brand-emblem-rose-light" d="M25 10v26H6l14-6Zm0 26h19l-14 5-5 21Zm0 0H6l14 5 5 21Zm0 0h19l-14-6-5-20Z" />
+</svg>
+
+const BrandIdentity = ({ meta }: { meta?: string }) => <div className="brand-identity">
+  <BrandEmblem />
+  <div className="brand-wordmark"><strong>SEA LINES</strong><span>OF COMMUNICATION</span></div>
+  {meta && <small className="brand-meta">{meta}</small>}
+</div>
+
 const MapResourceRow = ({ state, faction, regionId }: { state: GameState; faction: FactionId; regionId: RegionId }) => {
   const language = useLanguage()
   const resources = getEffectiveResources(state, regionId, faction)
+  const temporaryAwareness = hasPatrolAwareness(state, regionId, faction)
   return (
     <g>
-      <title>{`${factionText(faction, language).adjective}: ${resourceText('presence', language).name} ${resources.presence}, ${resourceText('awareness', language).name} ${resources.awareness}, ${resourceText('access', language).name} ${resources.access}, ${resourceText('logistics', language).name} ${resources.logistics}`}</title>
+      <title>{`${factionText(faction, language).adjective}: ${resourceText('presence', language).name} ${resources.presence}, ${resourceText('awareness', language).name} ${resources.awareness}${temporaryAwareness ? pick(language, ' (temporär)', ' (temporary)') : ''}, ${resourceText('access', language).name} ${resources.access}, ${resourceText('logistics', language).name} ${resources.logistics}`}</title>
       <rect className={`resource-pill ${faction}`} width="126" height="16" rx="8" />
       {RESOURCE_ORDER.map((resource, index) => {
         const x = 8 + index * 30
         return (
           <g className="map-resource-value" key={resource} transform={`translate(${x} 2)`}>
             <g transform="scale(.5)"><ResourceIconPaths resource={resource} /></g>
-            <text x="15" y="9.7">{resources[resource]}</text>
+            <text x="15" y="9.7">{resources[resource]}{resource === 'awareness' && temporaryAwareness ? '*' : ''}</text>
           </g>
         )
       })}
@@ -550,15 +570,16 @@ const RegionInspector = ({ state, regionId }: { state: GameState; regionId: Regi
           const usability = getUsability(state, regionId, faction)
           const resources = getEffectiveResources(state, regionId, faction)
           const suspended = state.suspensions.some((entry) => entry.faction === faction && entry.regionId === regionId)
+          const temporaryAwareness = hasPatrolAwareness(state, regionId, faction)
           return (
             <div className={`inspector-faction ${factionClass(faction)}`} key={faction}>
               <div><strong>{factionText(faction, language).adjective}</strong><span className={`status-text ${usability}`}>{usabilityText(usability, language).label}</span></div>
               <div className="mini-resources">
                 {RESOURCE_ORDER.map((resource) => (
-                  <span key={resource} title={resourceText(resource, language).name}><ResourceIcon resource={resource} /><b>{resources[resource]}</b></span>
+                  <span key={resource} title={`${resourceText(resource, language).name}${resource === 'awareness' && temporaryAwareness ? pick(language, ' (temporär)', ' (temporary)') : ''}`}><ResourceIcon resource={resource} /><b>{resources[resource]}{resource === 'awareness' && temporaryAwareness ? '*' : ''}</b></span>
                 ))}
               </div>
-              <small>{pick(language, 'Projektion', 'Projection')} {calculateProjection(state, regionId, faction)}{suspended ? pick(language, ' · Ressource suspendiert', ' · Resource suspended') : ''}</small>
+              <small>{pick(language, 'Projektion', 'Projection')} {calculateProjection(state, regionId, faction)}{temporaryAwareness ? pick(language, ' · * Lagebild temporär', ' · * Awareness temporary') : ''}{suspended ? pick(language, ' · Ressource suspendiert', ' · Resource suspended') : ''}</small>
             </div>
           )
         })}
@@ -669,7 +690,7 @@ const HelpDialog = ({ onClose }: { onClose: () => void }) => {
 
         <div className="help-section-grid">
           <article><h3>{pick(language, 'Spielablauf', 'Turn flow')}</h3><p>{pick(language, 'Jede Koalition erhält 3 AP. Spiele Karten, wähle ihre Ziele auf der Karte und beende anschließend den Zug. Nach beiden Zügen zählt nur die ertragreichste nutzbare SLOC.', 'Each coalition receives 3 AP. Play cards, choose their targets on the map, then end the turn. After both turns, only the highest-yield usable SLOC scores.')}</p></article>
-          <article><h3>{pick(language, 'Karten und Flotten', 'Cards and fleets')}</h3><p>{pick(language, 'Patrouillenverband verlegt 1 Präsenz für 1 AP ein oder zwei Felder weit; verwehrte Zwischenräume können nicht übersprungen werden. Vorausstationierung verstärkt das Heimatmeer oder einen versorgten Vorposten.', 'Patrol Group moves 1 Presence one or two regions for 1 AP; denied intermediate regions cannot be crossed. Forward Deployment reinforces the home sea or a supplied outpost.')}</p></article>
+          <article><h3>{pick(language, 'Karten und Flotten', 'Cards and fleets')}</h3><p>{pick(language, 'Patrouillenverband verlegt 1 Präsenz für 1 AP ein oder zwei Felder weit und erzeugt am Ziel bis zur Wertung mindestens Lagebild 1; verwehrte Zwischenräume können nicht übersprungen werden. Vorausstationierung verstärkt dauerhaft das Heimatmeer oder einen versorgten Vorposten.', 'Patrol Group moves 1 Presence one or two regions for 1 AP and provides at least 1 Awareness at the destination until evaluation; denied intermediate regions cannot be crossed. Forward Deployment permanently reinforces the home sea or a supplied outpost.')}</p></article>
           <article><h3>{pick(language, 'Verdeckte Aktionen', 'Covert actions')}</h3><p>{pick(language, 'Beschattung und Hybrider Druck können für +1 AP verdeckt vorbereitet werden. Sie wirken vor der Wertung ohne Eskalationsanstieg, verhindern aber Ruhebonus und automatische Beruhigung.', 'Shadowing and Hybrid Pressure may be prepared covertly for +1 AP. They resolve before scoring without raising Escalation, but prevent Restraint and automatic calming.')}</p></article>
           <article><h3>{pick(language, 'Staatsformen und Führung', 'Governments and leadership')}</h3><p>{pick(language, 'Demokratien erhalten +1 Ertrag bei Eskalation 0–2, Autokratien bei 3–5. Ab 6 gilt kein Vorteil. Die Endnote berücksichtigt Ergebnisabstand, Wirtschaft, Eskalation und Verantwortung.', 'Democracies gain +1 Yield at Escalation 0–2, Autocracies at 3–5. No government gains a bonus from 6 onward. The final rating uses result margin, Economy, Escalation, and Responsibility.')}</p></article>
         </div>
@@ -710,7 +731,7 @@ const HelpDialog = ({ onClose }: { onClose: () => void }) => {
         <div className="rules-notes">
           <p><strong>{pick(language, 'Freihafen:', 'Freeport:')}</strong> {pick(language, 'militärische Projektionsüberlegenheit kann den neutralen Markt höchstens unter Druck setzen, nie verwehren. Ohne aktiven eigenen Zugang bleibt die SLOC dennoch geschlossen.', 'military Projection superiority can at most contest the neutral market, never deny it. Without active friendly Access, the SLOC is still closed.')}</p>
           <p><strong>{pick(language, 'Engpasskontrolle:', 'Chokepoint control:')}</strong> {pick(language, 'mindestens 2 Punkte Projektionsvorsprung sowie 2 Präsenz und 1 Zugang in der Meridianstraße. Die Ausweich-SLOC bleibt möglich.', 'at least a 2-point Projection lead plus 2 Presence and 1 Access in Meridian Strait. The Detour SLOC remains available.')}</p>
-          <p><strong>{pick(language, 'Präsenz und Lagebild:', 'Presence and Awareness:')}</strong> {pick(language, 'Vorausstationierung verbessert zusätzlich das Lagebild bis maximal 2. Bloßes Verlegen vorhandener Präsenz tut dies nicht.', 'Forward Deployment also improves Awareness up to 2. Merely moving existing Presence does not.')}</p>
+          <p><strong>{pick(language, 'Präsenz und Lagebild:', 'Presence and Awareness:')}</strong> {pick(language, 'Vorausstationierung verbessert das dauerhafte Lagebild bis maximal 2. Ein Patrouillenverband stellt am Ziel bis zur nächsten Wertung ein nicht stapelbares Lagebild von mindestens 1 her.', 'Forward Deployment improves permanent Awareness up to 2. A Patrol Group establishes non-stacking Awareness of at least 1 at its destination until the next evaluation.')}</p>
           <p><strong>{pick(language, 'Versorgte Vorposten:', 'Supplied outposts:')}</strong> {pick(language, 'benötigen aktiven Zugang, aktive Logistik und einen nicht verwehrten Abschnitt einer eigenen SLOC bis zum Heimatmeer.', 'require active Access, active Logistics, and a non-denied segment of a friendly SLOC back to the home sea.')}</p>
           <p><strong>{pick(language, 'Eskalation:', 'Escalation:')}</strong> {pick(language, 'verändert nicht den Status „frei/zu“, reduziert aber zusätzlich den wirtschaftlichen Ertrag einer weiterhin nutzbaren SLOC.', 'does not change open/closed status, but further reduces the economic Yield of an otherwise usable SLOC.')}</p>
           <p><strong>{pick(language, 'Konvoisicherung:', 'Convoy Escort:')}</strong> {pick(language, 'hebt bei der nächsten Wertung genau einen „unter Druck“-Malus auf.', 'removes exactly one contested penalty during the next evaluation.')}</p>
@@ -1155,6 +1176,7 @@ const ChangelogDialog = ({ onClose }: { onClose: () => void }) => {
         pick(language, 'Die getrennten Haupt-SLOCs führen über die nördlichen Passagen, das Zentralbecken und die Meridianstraße zum Freihafen.', 'The separated Main SLOCs lead through the northern passages, Central Basin, and Meridian Strait to Freeport.'),
         pick(language, 'Die Ausweich-SLOCs umrunden die Landmassen vollständig über Wasser und passieren ihre südlichen Spitzen über den SW- beziehungsweise SO-Bogen.', 'The Detour SLOCs remain entirely at sea around the landmasses and pass their southern tips through the SW and SE Arcs.'),
         pick(language, 'Kartenprojektion, Beschriftungen und Routenkontrast wurden für breite 16:9-Bildschirme neu abgestimmt.', 'Map projection, labels, and route contrast were retuned for wide 16:9 displays.'),
+        pick(language, 'Patrouillenverbände erzeugen am Ziel bis zur nächsten Wirtschaftsauswertung ein nicht stapelbares temporäres Lagebild von mindestens 1.', 'Patrol Groups create non-stacking temporary Awareness of at least 1 at their destination until the next economic evaluation.'),
       ],
     },
     {
@@ -1324,8 +1346,7 @@ const ModeSelection = ({ language, onLanguage, rounds, onRounds, governments, on
         <AudioMenuButton musicVolume={musicVolume} musicMuted={musicMuted} onMusicVolume={onMusicVolume} onMusicMuted={onMusicMuted} onMusicStart={onMusicStart} />
       </div>
       <header className="mode-brand">
-        <span className="mode-brand-mark">✦</span>
-        <div><span>SEA LINES OF</span><strong>COMMUNICATION</strong><small>{pick(language, 'VERSION 1.0.4 · Strategische Seekarte', 'VERSION 1.0.4 · Strategic nautical chart')}</small></div>
+        <BrandIdentity meta={pick(language, 'VERSION 1.0.4 · Strategische Seekarte', 'VERSION 1.0.4 · Strategic nautical chart')} />
       </header>
       <section className="mode-intro">
         <span className="eyebrow">{pick(language, 'EINSATZBEREITSCHAFT HERSTELLEN', 'ESTABLISH READINESS')}</span>
@@ -1451,7 +1472,7 @@ const OnlineLobby = ({ session, snapshot, connection, onLeave, ...musicSettings 
   return (
     <main className="mode-screen lobby-screen" onClickCapture={musicSettings.onMusicStart} onKeyDownCapture={musicSettings.onMusicStart}>
       <div className="mode-utility-controls"><AudioMenuButton {...musicSettings} /></div>
-      <header className="mode-brand compact"><span className="mode-brand-mark">✦</span><div><span>SEA LINES OF</span><strong>COMMUNICATION</strong></div></header>
+      <header className="mode-brand compact"><BrandIdentity /></header>
       <section className="lobby-card">
         <span className="eyebrow">{pick(language, 'PRIVATER SPIELRAUM', 'PRIVATE GAME ROOM')}</span>
         <h1>{snapshot?.status === 'waiting' ? pick(language, 'Warten auf Rot', 'Waiting for Red') : pick(language, 'Verbindung wird hergestellt', 'Establishing connection')}</h1>
@@ -1921,8 +1942,8 @@ function GameApp({ language, onLanguage }: { language: Language; onLanguage: (la
         onGovernments={setSelectedGovernments}
         busy={launcherBusy}
         error={error}
-        hasSavedSingleGame={Boolean(localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(V7_STORAGE_KEY) ?? localStorage.getItem(V6_STORAGE_KEY) ?? localStorage.getItem(V5_STORAGE_KEY) ?? localStorage.getItem(V4_STORAGE_KEY) ?? localStorage.getItem(V3_STORAGE_KEY) ?? localStorage.getItem(V2_STORAGE_KEY) ?? localStorage.getItem(LEGACY_STORAGE_KEY))}
-        hasSavedLocalGame={Boolean(localStorage.getItem(LOCAL_PVP_STORAGE_KEY) ?? localStorage.getItem(V7_LOCAL_PVP_STORAGE_KEY) ?? localStorage.getItem(V6_LOCAL_PVP_STORAGE_KEY) ?? localStorage.getItem(V5_LOCAL_PVP_STORAGE_KEY) ?? localStorage.getItem(V4_LOCAL_PVP_STORAGE_KEY))}
+        hasSavedSingleGame={Boolean(localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(V8_STORAGE_KEY) ?? localStorage.getItem(V7_STORAGE_KEY) ?? localStorage.getItem(V6_STORAGE_KEY) ?? localStorage.getItem(V5_STORAGE_KEY) ?? localStorage.getItem(V4_STORAGE_KEY) ?? localStorage.getItem(V3_STORAGE_KEY) ?? localStorage.getItem(V2_STORAGE_KEY) ?? localStorage.getItem(LEGACY_STORAGE_KEY))}
+        hasSavedLocalGame={Boolean(localStorage.getItem(LOCAL_PVP_STORAGE_KEY) ?? localStorage.getItem(V8_LOCAL_PVP_STORAGE_KEY) ?? localStorage.getItem(V7_LOCAL_PVP_STORAGE_KEY) ?? localStorage.getItem(V6_LOCAL_PVP_STORAGE_KEY) ?? localStorage.getItem(V5_LOCAL_PVP_STORAGE_KEY) ?? localStorage.getItem(V4_LOCAL_PVP_STORAGE_KEY))}
         savedOnlineSession={savedOnlineSession}
         onSingleplayer={startSingleplayer}
         onLocalPvp={startLocalPvp}
@@ -1943,8 +1964,7 @@ function GameApp({ language, onLanguage }: { language: Language; onLanguage: (la
   return (
     <div className={`app-shell ${factionClass(state.activeFaction)}`} onClickCapture={startMusic} onKeyDownCapture={startMusic}>
       <header className="topbar">
-        <div className="brand-mark" aria-hidden="true"><span>✦</span></div>
-        <div className="brand-copy"><span>SEA LINES OF</span><strong>COMMUNICATION</strong><small>{isOnline ? `ONLINE · ${pick(language, 'DU', 'YOU')}: ${factionText(viewerFaction, language).adjective}` : isLocalPvp ? pick(language, 'LOKALES PVP · PASS-AND-PLAY', 'LOCAL PVP · PASS-AND-PLAY') : pick(language, 'EINZELSPIELER · DU: BLAU', 'SINGLE PLAYER · YOU: BLUE')}</small></div>
+        <BrandIdentity meta={isOnline ? `ONLINE · ${pick(language, 'DU', 'YOU')}: ${factionText(viewerFaction, language).adjective}` : isLocalPvp ? pick(language, 'LOKALES PVP · PASS-AND-PLAY', 'LOCAL PVP · PASS-AND-PLAY') : pick(language, 'EINZELSPIELER · DU: BLAU', 'SINGLE PLAYER · YOU: BLUE')} />
         <div className="turn-status">
           <span>{pick(language, 'RUNDE', 'ROUND')}</span><strong>{state.round}<small>/ {state.maxRounds}</small></strong>
           <i />

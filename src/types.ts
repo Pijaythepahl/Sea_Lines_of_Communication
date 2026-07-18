@@ -110,6 +110,13 @@ export interface TemporarySuspension {
   expiresAfterRound: number
 }
 
+export interface PatrolAwareness {
+  id: string
+  faction: FactionId
+  regionId: RegionId
+  expiresAfterRound: number
+}
+
 export interface RouteProtection {
   id: string
   faction: FactionId
@@ -177,7 +184,7 @@ export interface LeadershipRating {
 }
 
 export interface GameState {
-  version: 8
+  version: 9
   maxRounds: RoundCount
   governments: GovernmentSelection
   round: number
@@ -201,6 +208,7 @@ export interface GameState {
   endedActionPoints: Record<FactionId, number>
   lastEvaluationEscalation: number
   lastYield: Record<FactionId, YieldResult>
+  patrolAwareness: PatrolAwareness[]
   suspensions: TemporarySuspension[]
   protections: RouteProtection[]
   covertOperations: CovertOperation[]

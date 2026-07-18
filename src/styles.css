@@ -46,7 +46,7 @@ button:focus-visible, [role="button"]:focus-visible { outline: 3px solid var(--b
 .topbar {
   height: 76px;
   display: grid;
-  grid-template-columns: 58px minmax(350px, 1fr) auto auto auto;
+  grid-template-columns: minmax(440px, 1fr) auto auto auto;
   align-items: center;
   gap: 16px;
   padding: 0 18px;
@@ -61,20 +61,17 @@ button:focus-visible, [role="button"]:focus-visible { outline: 3px solid var(--b
   z-index: 30;
 }
 
-.brand-mark {
-  width: 48px; height: 56px; display: grid; place-items: center;
-  color: var(--brass-light); font-size: 30px;
-  background: linear-gradient(180deg, #12364c, #071b2a);
-  border: 1px solid var(--brass); border-top: 0;
-  clip-path: polygon(0 0,100% 0,100% 83%,50% 100%,0 83%);
-  filter: drop-shadow(0 4px 3px rgba(0,0,0,.3));
-}
-
-.brand-copy { display: flex; align-items: baseline; gap: 8px; white-space: nowrap; }
-.brand-copy > span, .brand-copy > strong { font-family: Georgia, "Times New Roman", serif; letter-spacing: .16em; }
-.brand-copy > span { font-size: 16px; font-weight: 400; }
-.brand-copy > strong { font-size: 24px; color: #fff; }
-.brand-copy small { margin-left: 10px; padding-left: 18px; border-left: 1px solid rgba(255,255,255,.22); color: #9eb0b9; font-size: 9px; letter-spacing: .11em; text-transform: uppercase; }
+.brand-identity { display: flex; align-items: center; gap: 13px; min-width: 0; color: var(--ivory); white-space: nowrap; }
+.brand-emblem { width: 82px; height: 48px; flex: 0 0 auto; color: var(--brass); filter: drop-shadow(0 3px 3px rgba(0,0,0,.24)); }
+.brand-emblem-frame, .brand-emblem-divider, .brand-emblem-route, .brand-emblem-node { fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.brand-emblem-route { stroke-width: 1.5; opacity: .9; }
+.brand-emblem-node { fill: var(--navy-950); stroke-width: 2; }
+.brand-emblem-rose-dark { fill: #b78436; }
+.brand-emblem-rose-light { fill: var(--ivory); }
+.brand-wordmark { display: grid; gap: 1px; font-family: Georgia, "Times New Roman", serif; line-height: 1; text-transform: uppercase; }
+.brand-wordmark strong { color: var(--ivory); font-size: 21px; letter-spacing: .13em; }
+.brand-wordmark span { color: #c8d2d5; font-size: 8px; letter-spacing: .29em; }
+.brand-meta { margin-left: 8px; padding-left: 17px; color: #9eb0b9; border-left: 1px solid rgba(255,255,255,.22); font-size: 8px; letter-spacing: .11em; text-transform: uppercase; }
 
 .turn-status { display: flex; align-items: center; gap: 11px; min-width: 230px; }
 .turn-status > span, .turn-status div span { display: block; font-size: 8px; letter-spacing: .18em; color: #93a9b5; font-weight: 800; }
@@ -529,13 +526,12 @@ button:focus-visible, [role="button"]:focus-visible { outline: 3px solid var(--b
 .mode-backdrop i:nth-child(2) { top: 70%; left: 48%; transform: rotate(-20deg); }
 .mode-backdrop i:nth-child(3) { top: 48%; left: 22%; transform: rotate(-6deg); }
 
-.mode-brand { position: relative; z-index: 1; display: flex; align-items: center; gap: 17px; padding-bottom: 18px; border-bottom: 1px solid rgba(215,184,121,.38); }
-.mode-brand-mark { width: 54px; height: 62px; display: grid; place-items: center; flex: 0 0 auto; color: var(--brass-light); background: var(--navy-900); border: 1px solid var(--brass); font-size: 28px; clip-path: polygon(0 0, 100% 0, 100% 82%, 50% 100%, 0 82%); }
-.mode-brand > div { display: flex; align-items: baseline; gap: 9px; }
-.mode-brand span:not(.mode-brand-mark), .mode-brand strong { font-family: Georgia, serif; letter-spacing: .17em; }
-.mode-brand > div > span { font-size: 16px; }
-.mode-brand strong { color: #fff; font-size: 25px; }
-.mode-brand small { margin-left: 14px; padding-left: 18px; color: #93a9b5; border-left: 1px solid rgba(255,255,255,.2); font-size: 9px; letter-spacing: .11em; text-transform: uppercase; }
+.mode-brand { position: relative; z-index: 1; padding-bottom: 18px; border-bottom: 1px solid rgba(215,184,121,.38); }
+.mode-brand .brand-emblem { width: 104px; height: 60px; }
+.mode-brand .brand-identity { gap: 17px; }
+.mode-brand .brand-wordmark strong { color: #fff; font-size: 28px; letter-spacing: .15em; }
+.mode-brand .brand-wordmark span { color: #c7d2d6; font-size: 10px; letter-spacing: .31em; }
+.mode-brand .brand-meta { margin-left: 14px; padding-left: 18px; color: #93a9b5; font-size: 9px; }
 .mode-brand.compact { max-width: 980px; margin: 0 auto; }
 
 .mode-utility-controls { position: absolute; z-index: 4; top: 26px; right: clamp(24px, 5vw, 86px); display: flex; align-items: flex-start; gap: 7px; }
@@ -684,9 +680,11 @@ button:focus-visible, [role="button"]:focus-visible { outline: 3px solid var(--b
 }
 
 @media (max-width: 1500px) and (min-width: 1200px) {
-  .brand-copy small { display: none; }
-  .brand-copy > span { font-size: 13px; }
-  .brand-copy > strong { font-size: 20px; }
+  .topbar { grid-template-columns: minmax(330px, 1fr) auto auto auto; }
+  .topbar .brand-meta { display: none; }
+  .topbar .brand-emblem { width: 70px; height: 43px; }
+  .topbar .brand-wordmark strong { font-size: 18px; }
+  .topbar .brand-wordmark span { font-size: 7px; }
   .turn-status { min-width: 195px; }
   .escalation-meter { min-width: 165px; }
   .map-resource-key { gap: 7px; font-size: 7.5px; }
@@ -734,10 +732,11 @@ button:focus-visible, [role="button"]:focus-visible { outline: 3px solid var(--b
 @media (max-width: 820px) {
   .mode-screen { padding: 18px 16px; overflow: auto; }
   .mode-brand { padding-right: 88px; }
-  .mode-brand small { display: none; }
-  .mode-brand > div { display: block; }
-  .mode-brand > div > span, .mode-brand strong { display: block; }
-  .mode-brand strong { margin-top: 3px; font-size: 18px; }
+  .mode-brand .brand-meta { display: none; }
+  .mode-brand .brand-emblem { width: 78px; height: 48px; }
+  .mode-brand .brand-identity { gap: 11px; }
+  .mode-brand .brand-wordmark strong { font-size: 19px; }
+  .mode-brand .brand-wordmark span { font-size: 7px; }
   .mode-options { grid-template-columns: minmax(0, 1fr); }
   .mode-settings { flex-direction: column; align-items: center; gap: 12px; }
   .language-switcher { top: 18px; right: 16px; }

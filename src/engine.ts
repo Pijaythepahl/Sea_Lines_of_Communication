@@ -93,7 +93,7 @@ export const createInitialState = (maxRounds: RoundCount = DEFAULT_ROUNDS, gover
   const blueDeck = createDeck('blue', maxRounds)
   const redDeck = createDeck('red', maxRounds)
   const state: GameState = {
-    version: 8,
+    version: 9,
     maxRounds,
     governments: { ...governments },
     round: 1,
@@ -120,6 +120,7 @@ export const createInitialState = (maxRounds: RoundCount = DEFAULT_ROUNDS, gover
       blue: { routeId: null, yield: 0, blocked: false, contestedRegions: 0, escalationPenalty: 0, responsibilityPenalty: 0, governmentBonus: 0, restraintBonus: 0, controlLossPenalty: 0 },
       red: { routeId: null, yield: 0, blocked: false, contestedRegions: 0, escalationPenalty: 0, responsibilityPenalty: 0, governmentBonus: 0, restraintBonus: 0, controlLossPenalty: 0 },
     },
+    patrolAwareness: [],
     suspensions: [],
     protections: [],
     covertOperations: [],
@@ -140,7 +141,24 @@ export const getEffectiveResources = (state: GameState, regionId: RegionId, fact
       result[suspension.resource] = Math.max(0, result[suspension.resource] - suspension.amount)
     }
   }
+  if (state.patrolAwareness.some((entry) => entry.faction === faction && entry.regionId === regionId)) {
+    result.awareness = Math.max(1, result.awareness)
+  }
   return result
+}
+
+export const hasPatrolAwareness = (state: GameState, regionId: RegionId, faction: FactionId): boolean =>
+  state.patrolAwareness.some((entry) => entry.faction === faction && entry.regionId === regionId)
+
+const reduceAwareness = (state: GameState, regionId: RegionId, faction: FactionId): boolean => {
+  const before = getEffectiveResources(state, regionId, faction).awareness
+  if (before === 0) return false
+  const resources = state.regions[regionId].resources[faction]
+  if (resources.awareness > 0) resources.awareness -= 1
+  if (getEffectiveResources(state, regionId, faction).awareness >= before) {
+    state.patrolAwareness = state.patrolAwareness.filter((entry) => entry.faction !== faction || entry.regionId !== regionId)
+  }
+  return true
 }
 
 export const calculateProjection = (state: GameState, regionId: RegionId, faction: FactionId): number => {
@@ -283,7 +301,7 @@ export const getValidRegionTargets = (state: GameState, cardId: CardId, selected
     case 'forward_base':
       return all.filter((id) => getEffectiveResources(state, id, faction).access > 0 && hasRoom(state, id, faction, 'logistics'))
     case 'shadowing_operation':
-      return all.filter((id) => getEffectiveResources(state, id, faction).awareness > 0 && state.regions[id].resources[opponent].awareness > 0)
+      return all.filter((id) => getEffectiveResources(state, id, faction).awareness > 0 && getEffectiveResources(state, id, opponent).awareness > 0)
     case 'hybrid_pressure':
       return all.filter((id) => getEffectiveResources(state, id, opponent).access > 0 || getEffectiveResources(state, id, opponent).logistics > 0)
     default:
@@ -373,10 +391,20 @@ export const playCard = (state: GameState, play: CardPlay): GameState => {
     case 'patrol_group':
       next.regions[targets[0]].resources[faction].presence -= 1
       next.regions[targets[1]].resources[faction].presence += 1
+      if (next.regions[targets[1]].resources[faction].awareness === 0 && !hasPatrolAwareness(next, targets[1], faction)) {
+        next.patrolAwareness.push({
+          id: `patrol-awareness-${Date.now()}-${Math.random()}`,
+          faction,
+          regionId: targets[1],
+          expiresAfterRound: next.round,
+        })
+      }
       break
     case 'forward_deployment':
       next.regions[targets[0]].resources[faction].presence += 1
-      next.regions[targets[0]].resources[faction].awareness = Math.min(2, next.regions[targets[0]].resources[faction].awareness + 1)
+      if (next.regions[targets[0]].resources[faction].awareness < 2) {
+        next.regions[targets[0]].resources[faction].awareness += 1
+      }
       break
     case 'isr_recon':
       next.regions[targets[0]].resources[faction].awareness += 1
@@ -401,7 +429,7 @@ export const playCard = (state: GameState, play: CardPlay): GameState => {
       })
       break
     case 'shadowing_operation':
-      next.regions[targets[0]].resources[opponent].awareness -= 1
+      reduceAwareness(next, targets[0], opponent)
       break
     case 'hybrid_pressure':
       next.suspensions.push({
@@ -455,10 +483,7 @@ export const resolveCovertOperations = (state: GameState): GameState => {
     const target = operation.regions[0]
     let effective = false
     if (operation.card.cardId === 'shadowing_operation') {
-      if (before.regions[target].resources[opponent].awareness > 0) {
-        next.regions[target].resources[opponent].awareness = Math.max(0, next.regions[target].resources[opponent].awareness - 1)
-        effective = true
-      }
+      if (getEffectiveResources(before, target, opponent).awareness > 0) effective = reduceAwareness(next, target, opponent)
     } else if (operation.card.cardId === 'hybrid_pressure' && operation.resource) {
       if (getEffectiveResources(before, target, opponent)[operation.resource] > 0) {
         next.suspensions.push({
@@ -601,6 +626,7 @@ export const endTurn = (state: GameState): GameState => {
   }
   next.suspensions = next.suspensions.filter((entry) => entry.expiresAfterRound > next.round)
   next.protections = next.protections.filter((entry) => entry.expiresAfterRound > next.round)
+  next.patrolAwareness = next.patrolAwareness.filter((entry) => entry.expiresAfterRound > next.round)
 
   if (next.round >= next.maxRounds) {
     next.phase = 'complete'
@@ -635,7 +661,12 @@ export const createFactionView = (state: GameState, faction: FactionId): GameSta
 export const migrateGameState = (stored: unknown): GameState => {
   const next = structuredClone(stored) as any
   const sourceVersion = Number(next.version ?? 0)
-  if (next.version === 8) return next as GameState
+  if (next.version === 9) return next as GameState
+  if (sourceVersion === 8) {
+    next.patrolAwareness = []
+    next.version = 9
+    return next as GameState
+  }
   const legacyMatchup = String(next.matchup ?? 'democracy-democracy')
   next.governments = next.governments ?? {
     blue: legacyMatchup.startsWith('autocracy-') ? 'autocracy' : 'democracy',
@@ -660,6 +691,7 @@ export const migrateGameState = (stored: unknown): GameState => {
     next.leadershipHistoryComplete ??= completedRounds === 0 && next.totalEscalation.blue === 0 && next.totalEscalation.red === 0
   }
   next.covertOperations ??= []
+  next.patrolAwareness ??= []
   for (const faction of ['blue', 'red'] as const) {
     const zones: CardInstance[] = [
       ...next.decks[faction],
@@ -694,7 +726,7 @@ export const migrateGameState = (stored: unknown): GameState => {
   delete next.deescalatedThisRound
   delete next.detourUpgradedRound
   delete next.matchup
-  next.version = 8
+  next.version = 9
   return next as GameState
 }
 

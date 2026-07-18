@@ -52,9 +52,9 @@ const EN_ROUTES: Record<RouteId, string> = {
 
 const EN_CARDS: Record<CardId, Pick<CardDefinition, 'title' | 'domain' | 'description' | 'instruction' | 'playHint' | 'escalationReason'>> = {
   patrol_group: {
-    title: 'Patrol Group', domain: 'Presence', description: 'Move 1 Presence one or two regions.',
+    title: 'Patrol Group', domain: 'Presence', description: 'Move 1 Presence one or two regions. The destination has at least 1 Awareness until the next evaluation.',
     instruction: 'Select the origin first, then a destination up to two regions away.',
-    playHint: 'Moves 1 Presence for 1 AP. A two-region move requires a non-denied intermediate region, which is determined automatically.',
+    playHint: 'Moves 1 Presence for 1 AP and creates non-stacking temporary Awareness at the destination. A two-region move requires a non-denied intermediate region.',
   },
   forward_deployment: {
     title: 'Forward Deployment', domain: 'Presence', description: '+1 Presence and up to +1 Awareness at home or at a supplied outpost.',

@@ -10,6 +10,7 @@ Rundenbasiertes maritimes Strategiespiel für Desktop und Laptop. Version 1.0.4 
 - Die getrennten Haupt-SLOCs führen über die nördlichen Passagen, das Zentralbecken und die Meridianstraße zum Freihafen.
 - Die Ausweich-SLOCs umrunden die Landmassen vollständig über Wasser und passieren ihre südlichen Spitzen über den SW- beziehungsweise SO-Bogen.
 - Kartenprojektion, Beschriftungen und Routenkontrast wurden für breite 16:9-Bildschirme neu abgestimmt.
+- Patrouillenverbände erzeugen am Ziel bis zur nächsten Wirtschaftsauswertung ein nicht stapelbares temporäres Lagebild von mindestens 1.
 
 ## Version 1.0.3
 

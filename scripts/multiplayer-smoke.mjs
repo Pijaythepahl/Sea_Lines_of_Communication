@@ -64,7 +64,7 @@ const created = await request('/api/rooms', {
   body: JSON.stringify({ maxRounds: 12, blueGovernment: 'autocracy' }),
 })
 if (created.snapshot.status !== 'waiting' || created.session.faction !== 'blue') throw new Error('Room creation contract failed')
-if (created.snapshot.state.maxRounds !== 12 || created.snapshot.state.version !== 8) throw new Error('Room configuration contract failed')
+if (created.snapshot.state.maxRounds !== 12 || created.snapshot.state.version !== 9) throw new Error('Room configuration contract failed')
 if (created.snapshot.state.governments.blue !== 'autocracy') throw new Error('Host government did not synchronize')
 
 const joined = await request(`/api/rooms/${created.session.roomCode}/join`, {

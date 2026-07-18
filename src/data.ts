@@ -129,8 +129,8 @@ export const CARD_ORDER: CardId[] = [
 export const CARDS: Record<CardId, CardDefinition> = {
   patrol_group: {
     id: 'patrol_group', title: 'Patrouillenverband', domain: 'Präsenz', icon: '⚓', cost: 1, target: 'region-pair',
-    description: 'Verlege 1 Präsenz ein oder zwei Regionen weit.', instruction: 'Wähle zuerst den Ausgangsraum, dann ein Ziel in bis zu zwei Feldern Entfernung.',
-    playHint: 'Verlegt 1 Präsenz für 1 AP. Bei zwei Feldern muss ein nicht verwehrter Zwischenraum existieren; dieser wird automatisch ermittelt.',
+    description: 'Verlege 1 Präsenz ein oder zwei Regionen weit. Am Ziel gilt bis zur nächsten Wertung mindestens Lagebild 1.', instruction: 'Wähle zuerst den Ausgangsraum, dann ein Ziel in bis zu zwei Feldern Entfernung.',
+    playHint: 'Verlegt 1 Präsenz für 1 AP und erzeugt am Ziel ein nicht stapelbares temporäres Lagebild. Bei zwei Feldern muss ein nicht verwehrter Zwischenraum existieren.',
     escalation: 0,
   },
   forward_deployment: {
