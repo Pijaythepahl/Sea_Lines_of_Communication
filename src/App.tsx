@@ -437,7 +437,7 @@ const MapBoard = ({
           </defs>
           <image
             className="nautical-chart-image"
-            href="/images/pelagos-nautical-chart.png"
+            href="/images/pelagos-strategic-chart.png"
             width={cinematicMap ? 1200 : 900}
             height={cinematicMap ? 420 : 530}
             preserveAspectRatio="none"
@@ -482,7 +482,7 @@ const MapBoard = ({
             const usability = getUsability(state, regionId, state.activeFaction)
             const selected = inspected === regionId
             const valid = validRegions.includes(regionId)
-            const sideDetails = regionId === 'meridian_strait'
+            const meridianDetails = regionId === 'meridian_strait'
             const southernDetails = regionId === 'southwest_arc' || regionId === 'southeast_arc'
             const resourceX = regionId === 'southwest_arc' ? -153 : regionId === 'southeast_arc' ? 27 : -63
             const blueResourceY = southernDetails ? -17 : 47
@@ -499,12 +499,12 @@ const MapBoard = ({
                 <circle className="node-ring" r={region.chokepoint ? 29 : 25} />
                 <circle className="node-core" r={region.chokepoint ? 22 : 19} />
                 <text className="node-symbol" y="5">{region.chokepoint ? '◇' : region.market ? '¤' : '✦'}</text>
-                <text className={`node-title ${sideDetails ? 'is-side' : ''}`} x={sideDetails ? 35 : 0} y={sideDetails ? -13 : region.y <= 60 ? -29 : -34}>{region.shortName}</text>
+                <text className="node-title" x={0} y={meridianDetails ? -37 : region.y <= 60 ? -29 : -34}>{region.shortName}</text>
                 <text className="node-status" y={region.chokepoint ? 45 : 41}>{usabilityText(usability, language).short}</text>
-                <g transform={sideDetails ? 'translate(34 4)' : `translate(${resourceX} ${blueResourceY})`}>
+                <g transform={meridianDetails ? 'translate(34 -17)' : `translate(${resourceX} ${blueResourceY})`}>
                   <MapResourceRow state={state} regionId={regionId} faction="blue" />
                 </g>
-                <g transform={sideDetails ? 'translate(34 21)' : `translate(${resourceX} ${redResourceY})`}>
+                <g transform={meridianDetails ? 'translate(34 0)' : `translate(${resourceX} ${redResourceY})`}>
                   <MapResourceRow state={state} regionId={regionId} faction="red" />
                 </g>
               </g>
@@ -1146,11 +1146,11 @@ const ChangelogDialog = ({ onClose }: { onClose: () => void }) => {
   const entries = [
     {
       version: '1.0.4',
-      title: pick(language, 'Realistische Seekarte', 'Realistic nautical chart'),
+      title: pick(language, 'Stilisierte strategische Seekarte', 'Stylized strategic nautical chart'),
       current: true,
       items: [
         pick(language, 'Die Musik folgt nun den strategischen Eskalationsfenstern: Stabilität bei 0–2, kontrollierte Spannung bei 3–5 und maximale Krise bei 6–8.', 'Music now follows the strategic Escalation windows: stability at 0–2, controlled tension at 3–5, and maximum crisis at 6–8.'),
-        pick(language, 'Eine entsättigte hydrographische Seekarte mit Tiefenlinien, zwei Küstenmassen und einer zentralen Freihafeninsel ersetzt den schematischen Kartenhintergrund.', 'A desaturated hydrographic chart with depth contours, two coastal landmasses, and a central Freeport island replaces the schematic map background.'),
+        pick(language, 'Eine ruhige, stilisierte Seekarte überträgt die neue Geografie mit zwei Küstenmassen und einer zentralen Freihafeninsel in den klaren strategischen Stil der früheren Karte.', 'A calm, stylized nautical chart carries the new geography with two coastal landmasses and a central Freeport island into the clear strategic style of the earlier map.'),
         pick(language, 'Westliches und östliches Heimatmeer liegen nun als maritime Ausgangsbasen unmittelbar an den jeweiligen Küsten.', 'The Western and Eastern home seas now sit directly on their respective coasts as maritime starting bases.'),
         pick(language, 'Die getrennten Haupt-SLOCs führen über die nördlichen Passagen, das Zentralbecken und die Meridianstraße zum Freihafen.', 'The separated Main SLOCs lead through the northern passages, Central Basin, and Meridian Strait to Freeport.'),
         pick(language, 'Die Ausweich-SLOCs umrunden die Landmassen vollständig über Wasser und passieren ihre südlichen Spitzen über den SW- beziehungsweise SO-Bogen.', 'The Detour SLOCs remain entirely at sea around the landmasses and pass their southern tips through the SW and SE Arcs.'),
@@ -1325,7 +1325,7 @@ const ModeSelection = ({ language, onLanguage, rounds, onRounds, governments, on
       </div>
       <header className="mode-brand">
         <span className="mode-brand-mark">✦</span>
-        <div><span>SEA LINES OF</span><strong>COMMUNICATION</strong><small>{pick(language, 'VERSION 1.0.4 · Realistische Seekarte', 'VERSION 1.0.4 · Realistic nautical chart')}</small></div>
+        <div><span>SEA LINES OF</span><strong>COMMUNICATION</strong><small>{pick(language, 'VERSION 1.0.4 · Strategische Seekarte', 'VERSION 1.0.4 · Strategic nautical chart')}</small></div>
       </header>
       <section className="mode-intro">
         <span className="eyebrow">{pick(language, 'EINSATZBEREITSCHAFT HERSTELLEN', 'ESTABLISH READINESS')}</span>

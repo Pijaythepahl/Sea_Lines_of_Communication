@@ -5,7 +5,7 @@ Rundenbasiertes maritimes Strategiespiel für Desktop und Laptop. Version 1.0.4 
 ## Version 1.0.4
 
 - Die Musik folgt den strategischen Eskalationsfenstern: Stabilität bei 0–2, kontrollierte Spannung bei 3–5 und maximale Krise bei 6–8.
-- Eine entsättigte hydrographische Seekarte mit Tiefenlinien, zwei Küstenmassen und einer zentralen Freihafeninsel ersetzt den schematischen Kartenhintergrund.
+- Eine ruhige, stilisierte Seekarte überträgt die neue Geografie mit zwei Küstenmassen und einer zentralen Freihafeninsel in den klaren strategischen Stil der früheren Karte.
 - Westliches und östliches Heimatmeer liegen als maritime Ausgangsbasen unmittelbar an den jeweiligen Küsten.
 - Die getrennten Haupt-SLOCs führen über die nördlichen Passagen, das Zentralbecken und die Meridianstraße zum Freihafen.
 - Die Ausweich-SLOCs umrunden die Landmassen vollständig über Wasser und passieren ihre südlichen Spitzen über den SW- beziehungsweise SO-Bogen.
