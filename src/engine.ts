@@ -3,6 +3,7 @@ import type {
   CardId,
   CardInstance,
   CardPlay,
+  CovertAvailability,
   CovertOperation,
   FactionId,
   GameState,
@@ -314,6 +315,35 @@ export const getValidHybridResources = (state: GameState, regionId: RegionId): S
   return (['access', 'logistics'] as const).filter((resource) => getEffectiveResources(state, regionId, opponent)[resource] > 0)
 }
 
+export const getCovertAvailability = (state: GameState, cardId: CardId): CovertAvailability => {
+  const totalCost = CARDS[cardId].cost + 1
+  if (!COVERT_CARD_IDS.includes(cardId)) {
+    return { available: false, totalCost, targets: [], reason: 'unsupported-card' }
+  }
+
+  const faction = state.activeFaction
+  const opponent = otherFaction(faction)
+  const effectTargets = cardId === 'shadowing_operation'
+    ? REGION_ORDER.filter((regionId) => getEffectiveResources(state, regionId, opponent).awareness > 0)
+    : getValidRegionTargets(state, cardId)
+  const targets = effectTargets.filter((regionId) =>
+    getEffectiveResources(state, regionId, faction).awareness >= 1
+      && getEffectiveResources(state, regionId, opponent).awareness <= 1,
+  )
+
+  let reason: CovertAvailability['reason']
+  if (totalCost > state.actionPoints) reason = 'insufficient-action-points'
+  else if (targets.length > 0) reason = undefined
+  else if (effectTargets.length === 0) reason = 'no-base-target'
+  else if (!effectTargets.some((regionId) => getEffectiveResources(state, regionId, faction).awareness >= 1)) reason = 'friendly-awareness'
+  else if (!effectTargets
+    .filter((regionId) => getEffectiveResources(state, regionId, faction).awareness >= 1)
+    .some((regionId) => getEffectiveResources(state, regionId, opponent).awareness <= 1)) reason = 'enemy-awareness'
+  else reason = 'no-valid-target'
+
+  return { available: !reason, totalCost, targets, reason }
+}
+
 export const isPlayReady = (cardId: CardId, play: CardPlay): boolean => {
   const target = CARDS[cardId].target
   if (target === 'none') return true
@@ -352,9 +382,7 @@ const assertValidPlay = (state: GameState, cardId: CardId, play: CardPlay): void
   }
   if (play.covert) {
     const target = selected[0]
-    const faction = state.activeFaction
-    const opponent = otherFaction(faction)
-    if (getEffectiveResources(state, target, faction).awareness < 1 || getEffectiveResources(state, target, opponent).awareness > 1) {
+    if (!getCovertAvailability(state, cardId).targets.includes(target)) {
       throw new Error('Verdeckte Operationen benötigen eigenes Lagebild und dürfen nicht von starkem gegnerischem Lagebild erfasst werden.')
     }
   }

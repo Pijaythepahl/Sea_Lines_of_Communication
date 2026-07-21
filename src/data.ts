@@ -94,21 +94,25 @@ export const ROUTES: Record<RouteId, RouteDefinition> = {
     id: 'blue_main', faction: 'blue', name: 'Blaue Haupt-SLOC', kind: 'main', baseYield: 6,
     regions: ['western_sea', 'northwest_passage', 'central_basin', 'meridian_strait', 'freeport_sea'],
     svgPath: 'M200 145 C222 104 258 78 300 70 C350 70 402 70 444 70 L444 220 C414 239 379 263 382 286 C386 304 416 320 444 325',
+    statusPosition: { x: 365, y: 99 },
   },
   blue_detour: {
     id: 'blue_detour', faction: 'blue', name: 'Blaue Ausweich-SLOC', kind: 'detour', baseYield: 3,
     regions: ['western_sea', 'southwest_arc', 'freeport_sea'],
     svgPath: 'M200 145 C94 202 62 330 115 413 C176 487 302 489 375 448 C415 425 426 363 444 325',
+    statusPosition: { x: 270, y: 395 },
   },
   red_main: {
     id: 'red_main', faction: 'red', name: 'Rote Haupt-SLOC', kind: 'main', baseYield: 6,
     regions: ['eastern_sea', 'northeast_passage', 'central_basin', 'meridian_strait', 'freeport_sea'],
     svgPath: 'M700 145 C678 104 642 78 600 70 C550 70 498 70 456 70 L456 220 C486 239 521 263 518 286 C514 304 484 320 456 325',
+    statusPosition: { x: 535, y: 99 },
   },
   red_detour: {
     id: 'red_detour', faction: 'red', name: 'Rote Ausweich-SLOC', kind: 'detour', baseYield: 3,
     regions: ['eastern_sea', 'southeast_arc', 'freeport_sea'],
     svgPath: 'M700 145 C806 202 838 330 785 413 C724 487 598 489 525 448 C485 425 474 363 456 325',
+    statusPosition: { x: 630, y: 395 },
   },
 }
 

@@ -6,6 +6,7 @@ import {
   createFactionView,
   getEffectiveResources,
   getBestYield,
+  getCovertAvailability,
   getUsability,
   getValidHybridResources,
   getValidRegionTargets,
@@ -84,8 +85,12 @@ const enumerateBasePlays = (state: GameState, card: CardInstance): CardPlay[] =>
 const enumeratePlays = (state: GameState, card: CardInstance): CardPlay[] => {
   const base = enumerateBasePlays(state, card)
   if (!(['shadowing_operation', 'hybrid_pressure'] as const).includes(card.cardId as 'shadowing_operation' | 'hybrid_pressure')) return base
-  if (CARDS[card.cardId].cost + 1 > state.actionPoints) return base
-  return [...base, ...base.map((play) => ({ ...play, covert: true }))]
+  const availability = getCovertAvailability(state, card.cardId)
+  if (!availability.available) return base
+  const covert = base
+    .filter((play) => play.regions?.[0] && availability.targets.includes(play.regions[0]))
+    .map((play) => ({ ...play, covert: true }))
+  return [...base, ...covert]
 }
 
 const evaluateState = (state: GameState, faction: GameState['activeFaction']): number => {

@@ -17,6 +17,13 @@ export type RegionId =
 export type RouteId = 'blue_main' | 'blue_detour' | 'red_main' | 'red_detour'
 export type ResourceKey = 'presence' | 'awareness' | 'access' | 'logistics'
 export type SuspendableResource = 'access' | 'logistics'
+export type CovertUnavailableReason =
+  | 'unsupported-card'
+  | 'insufficient-action-points'
+  | 'no-base-target'
+  | 'friendly-awareness'
+  | 'enemy-awareness'
+  | 'no-valid-target'
 export type Usability = 'free' | 'contested' | 'denied'
 export type GamePhase = 'action' | 'complete'
 export type CardId =
@@ -66,6 +73,14 @@ export interface RouteDefinition {
   baseYield: number
   regions: RegionId[]
   svgPath: string
+  statusPosition: { x: number; y: number }
+}
+
+export interface CovertAvailability {
+  available: boolean
+  totalCost: number
+  targets: RegionId[]
+  reason?: CovertUnavailableReason
 }
 
 export type CardTarget = 'region' | 'region-pair' | 'route' | 'hybrid-resource' | 'none'

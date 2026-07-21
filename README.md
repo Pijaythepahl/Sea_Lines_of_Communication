@@ -1,6 +1,14 @@
 # Sea Lines of Communication
 
-Rundenbasiertes maritimes Strategiespiel für Desktop und Laptop. Version 1.0.4 bietet eine vollständig deutsch- und englischsprachige Oberfläche, variable Einsatzdauer sowie Einzelspieler, lokales Pass-and-play und private Online-Partien.
+Rundenbasiertes maritimes Strategiespiel für Desktop und Laptop. Version 1.0.5 bietet eine vollständig deutsch- und englischsprachige Oberfläche, variable Einsatzdauer sowie Einzelspieler, lokales Pass-and-play und private Online-Partien.
+
+## Version 1.0.5
+
+- Beschattungsoperation und Hybrider Druck erhalten direkt auf der ausgewählten Karte einen Schalter für OFFEN oder VERDECKT.
+- Hybrider Druck bietet nach der Zielwahl einen zweiten Schalter für ZUGANG oder LOGISTIK; ungültige Optionen werden deaktiviert und erklärt.
+- Alle vier SLOCs bleiben gleichzeitig in Blau beziehungsweise Rot sichtbar. Eigene Plaketten zeigen OFFEN oder ZU und den aktuellen Routenertrag; geschlossene Routen stehen sichtbar still.
+- Die regionalen Zustände Frei, Unter Druck und Zu bleiben weiterhin die Perspektive der aktiven Koalition und werden nicht mit dem beidseitigen SLOC-Status vermischt.
+- Der Ruhebonus bleibt auch dann möglich, wenn beide eigenen SLOCs geschlossen sind, sofern mindestens 1 AP übrig ist und keine offene oder verdeckte Eskalationsaktion gespielt wurde.
 
 ## Version 1.0.4
 
@@ -47,7 +55,7 @@ Rundenbasiertes maritimes Strategiespiel für Desktop und Laptop. Version 1.0.4 
 - Der neutrale Freihafen kann durch Projektionsüberlegenheit höchstens unter Druck gesetzt, aber nicht militärisch vollständig verwehrt werden.
 - Das In-Game-Menü bündelt Hauptmenü, neue Partie und eine umfassende Hilfe; die Führungswertung erklärt ihre Teilnoten und gibt konkrete Hinweise.
 - Online-Revanchen behalten Raumcode, Sitze und Koalitionen und starten erst nach Zustimmung beider Seiten.
-- „Vorausstationierung“ erhöht neben der Präsenz auch das eigene Lagebild um 1, höchstens bis Lagebild 2. Das bloße Verlegen vorhandener Präsenz erzeugt kein Lagebild.
+- „Vorausstationierung“ erhöht neben der Präsenz auch das eigene Lagebild um 1, höchstens bis Lagebild 2. Ein Patrouillenverband stellt am Ziel bis zur nächsten Wertung ein nicht stapelbares Lagebild von mindestens 1 her.
 - Die wirtschaftlichen Schwellen der Führungswertung skalieren proportional zur Rundenzahl mit 2/3/4/5 Wirtschaftspunkten je Runde.
 
 ## Spielmodi
@@ -72,10 +80,10 @@ Rundenbasiertes maritimes Strategiespiel für Desktop und Laptop. Version 1.0.4 
 - WebSockets synchronisieren Karte, Ausbau, Zugwechsel und Verbindungsstatus in Echtzeit.
 - Gegnerische Hände, Decks, Abwurfdetails und geheime Aufträge werden nicht übertragen.
 
-## Regeln in Version 1.0.4
+## Regeln in Version 1.0.5
 
 - Ausweich-SLOCs starten bei Kapazität 3 und können mit den beiden Karten „Zusätzliche Tonnage“ dauerhaft bis 5 ausgebaut werden.
-- Eine friedliche Seite mit mindestens 1 Rest-AP erhält bei der Wertung +1 Ruhebonus.
+- Eine friedliche Seite mit mindestens 1 Rest-AP erhält bei der Wertung +1 Ruhebonus, selbst wenn beide eigenen SLOCs geschlossen sind.
 - Eskalation 8 verursacht Kontrollverlust: −1 Ertrag, beziehungsweise −2 bei eigener Eskalationsverantwortung in der Runde.
 - „Hybrider Druck“ und „Beschattungsoperation“ können für +1 AP verdeckt vorbereitet werden, wenn eigenes Lagebild mindestens 1 und gegnerisches Lagebild höchstens 1 beträgt.
 - Verdeckte Aufträge wirken gleichzeitig vor der Wirtschaftsauswertung, steigern die Eskalation nicht, verhindern aber Ruhebonus und automatische Deeskalation.

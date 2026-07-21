@@ -13,6 +13,7 @@ import {
   createInitialState,
   endTurn,
   evaluateChokepoint,
+  getCovertAvailability,
   getEffectiveResources,
   getEscalationBand,
   hasPatrolAwareness,
@@ -57,6 +58,7 @@ import { getMusicTrackForEscalation, MUSIC_TRACKS } from './music'
 import type {
   CardInstance,
   CardPlay,
+  CovertUnavailableReason,
   FactionId,
   GameState,
   GovernmentSelection,
@@ -497,6 +499,38 @@ const MapBoard = ({
             )
           })}
 
+          {ROUTE_ORDER.map((routeId) => {
+            const route = routeText(routeId, language)
+            const result = calculateRouteYield(state, routeId)
+            const controlLoss = state.escalation >= constants.MAX_ESCALATION && !result.blocked
+            const status = result.blocked
+              ? pick(language, 'ZU', 'CLOSED')
+              : controlLoss
+                ? pick(language, 'KONTROLLVERLUST', 'LOSS OF CONTROL')
+                : `${pick(language, 'OFFEN', 'OPEN')} +${result.yield}`
+            const kind = route.kind === 'main' ? pick(language, 'HAUPT', 'MAIN') : pick(language, 'AUSWEICH', 'DETOUR')
+            const detail = result.blocked
+              ? formatYieldReason(result, language)
+              : controlLoss
+                ? pick(language, 'Die SLOC bleibt technisch offen, der Verkehr kommt jedoch zum Erliegen.', 'The SLOC remains technically open, but traffic has come to a halt.')
+                : `${pick(language, 'Aktueller Routenertrag', 'Current route yield')} +${result.yield}`
+            return (
+              <g
+                key={`status-${routeId}`}
+                className={`route-status-marker ${factionClass(route.faction)} ${result.blocked ? 'is-blocked' : ''} ${controlLoss ? 'is-control-loss' : ''}`}
+                transform={`translate(${getMapX(route.statusPosition.x, cinematicMap)} ${getMapY(route.statusPosition.y, cinematicMap)})`}
+                role="img"
+                aria-label={`${route.name}: ${status}. ${detail}`}
+              >
+                <title>{route.name}: {status}. {detail}</title>
+                <rect x="-43" y="-12" width="86" height="24" rx="3" />
+                <text className="route-status-name" y="-2">{factionText(route.faction, language).adjective} · {kind}</text>
+                <text className="route-status-value" y="8">{status}</text>
+                {result.blocked && <path className="route-status-lock" d="M-38-6 L-31 6 M-31-6 L-38 6" />}
+              </g>
+            )
+          })}
+
           {REGION_ORDER.map((regionId) => {
             const region = regionText(regionId, language)
             const usability = getUsability(state, regionId, state.activeFaction)
@@ -549,8 +583,8 @@ const MapBoard = ({
           </strong>
         </div>
         <div className="sloc-legend" aria-label={pick(language, 'Legende der Seewege', 'Sea line legend')}>
-          <span><i className="earning-line" />{pick(language, 'Ertragbringende SLOC', 'Scoring SLOC')}</span>
-          <span><i className="reserve-line" />{pick(language, 'Ausweichroute / blockiert', 'Reserve route / blocked')}</span>
+          <span><i className="earning-line" />{pick(language, 'Durchgezogen · Hauptroute', 'Solid · main route')}</span>
+          <span><i className="reserve-line" />{pick(language, 'Gestrichelt · Ausweichroute', 'Dashed · detour route')}</span>
         </div>
         <RegionInspector state={state} regionId={inspected} />
       </div>
@@ -688,14 +722,14 @@ const HelpDialog = ({ onClose }: { onClose: () => void }) => {
     >
       <section className="route-rules-dialog help-dialog">
         <header>
-          <div><span className="eyebrow">{pick(language, 'SPIELHILFE · VERSION 1.0.4', 'GAME HELP · VERSION 1.0.4')}</span><h2 id="help-title">{pick(language, 'Seewege führen', 'Command the Sea Lines')}</h2></div>
+          <div><span className="eyebrow">{pick(language, 'SPIELHILFE · VERSION 1.0.5', 'GAME HELP · VERSION 1.0.5')}</span><h2 id="help-title">{pick(language, 'Seewege führen', 'Command the Sea Lines')}</h2></div>
           <button type="button" onClick={onClose} aria-label={pick(language, 'Regelhilfe schließen', 'Close rules')}>×</button>
         </header>
 
         <div className="help-section-grid">
           <article><h3>{pick(language, 'Spielablauf', 'Turn flow')}</h3><p>{pick(language, 'Jede Koalition erhält 3 AP. Spiele Karten, wähle ihre Ziele auf der Karte und beende anschließend den Zug. Nach beiden Zügen zählt nur die ertragreichste nutzbare SLOC.', 'Each coalition receives 3 AP. Play cards, choose their targets on the map, then end the turn. After both turns, only the highest-yield usable SLOC scores.')}</p></article>
           <article><h3>{pick(language, 'Karten und Flotten', 'Cards and fleets')}</h3><p>{pick(language, 'Patrouillenverband verlegt 1 Präsenz für 1 AP ein oder zwei Felder weit und erzeugt am Ziel bis zur Wertung mindestens Lagebild 1; verwehrte Zwischenräume können nicht übersprungen werden. Vorausstationierung verstärkt dauerhaft das Heimatmeer oder einen versorgten Vorposten.', 'Patrol Group moves 1 Presence one or two regions for 1 AP and provides at least 1 Awareness at the destination until evaluation; denied intermediate regions cannot be crossed. Forward Deployment permanently reinforces the home sea or a supplied outpost.')}</p></article>
-          <article><h3>{pick(language, 'Verdeckte Aktionen', 'Covert actions')}</h3><p>{pick(language, 'Beschattung und Hybrider Druck können für +1 AP verdeckt vorbereitet werden. Sie wirken vor der Wertung ohne Eskalationsanstieg, verhindern aber Ruhebonus und automatische Beruhigung.', 'Shadowing and Hybrid Pressure may be prepared covertly for +1 AP. They resolve before scoring without raising Escalation, but prevent Restraint and automatic calming.')}</p></article>
+          <article><h3>{pick(language, 'Verdeckte Aktionen', 'Covert actions')}</h3><p>{pick(language, 'Wähle Beschattung oder Hybriden Druck und schalte direkt auf der Karte zwischen OFFEN und VERDECKT um. Verdeckt kostet +1 AP, benötigt eigenes Lagebild 1 sowie gegnerisches Lagebild höchstens 1 und wirkt erst vor der Wertung. Bei Hybridem Druck wählst du zusätzlich ZUGANG oder LOGISTIK.', 'Select Shadowing or Hybrid Pressure and switch directly on the card between OPEN and COVERT. Covert costs +1 AP, requires friendly Awareness 1 and opposing Awareness no higher than 1, and resolves before evaluation. Hybrid Pressure also lets you choose ACCESS or LOGISTICS.')}</p></article>
           <article><h3>{pick(language, 'Staatsformen und Führung', 'Governments and leadership')}</h3><p>{pick(language, 'Demokratien erhalten +1 Ertrag bei Eskalation 0–2, Autokratien bei 3–5. Ab 6 gilt kein Vorteil. Die Endnote berücksichtigt Ergebnisabstand, Wirtschaft, Eskalation und Verantwortung.', 'Democracies gain +1 Yield at Escalation 0–2, Autocracies at 3–5. No government gains a bonus from 6 onward. The final rating uses result margin, Economy, Escalation, and Responsibility.')}</p></article>
         </div>
 
@@ -738,6 +772,8 @@ const HelpDialog = ({ onClose }: { onClose: () => void }) => {
           <p><strong>{pick(language, 'Präsenz und Lagebild:', 'Presence and Awareness:')}</strong> {pick(language, 'Vorausstationierung verbessert das dauerhafte Lagebild bis maximal 2. Ein Patrouillenverband stellt am Ziel bis zur nächsten Wertung ein nicht stapelbares Lagebild von mindestens 1 her.', 'Forward Deployment improves permanent Awareness up to 2. A Patrol Group establishes non-stacking Awareness of at least 1 at its destination until the next evaluation.')}</p>
           <p><strong>{pick(language, 'Versorgte Vorposten:', 'Supplied outposts:')}</strong> {pick(language, 'benötigen aktiven Zugang, aktive Logistik und einen nicht verwehrten Abschnitt einer eigenen SLOC bis zum Heimatmeer.', 'require active Access, active Logistics, and a non-denied segment of a friendly SLOC back to the home sea.')}</p>
           <p><strong>{pick(language, 'Eskalation:', 'Escalation:')}</strong> {pick(language, 'verändert nicht den Status „frei/zu“, reduziert aber zusätzlich den wirtschaftlichen Ertrag einer weiterhin nutzbaren SLOC.', 'does not change open/closed status, but further reduces the economic Yield of an otherwise usable SLOC.')}</p>
+          <p><strong>{pick(language, 'Kartenanzeige:', 'Map display:')}</strong> {pick(language, 'Die regionalen Zustände Frei, Unter Druck und Zu gelten weiterhin nur für die aktive Koalition. Die vier SLOCs bleiben dagegen gleichzeitig sichtbar; ihre Plaketten zeigen Koalition, Offen/Zu und den aktuellen Routenertrag.', 'Regional Open, Contested, and Denied states still apply only to the active coalition. All four SLOCs remain visible at once; their badges show coalition, Open/Closed, and current route yield.')}</p>
+          <p><strong>{pick(language, 'Ruhebonus:', 'Restraint bonus:')}</strong> {pick(language, 'Eine Seite mit mindestens 1 Rest-AP und ohne offene oder verdeckte Eskalationsaktion erhält +1 – auch wenn beide eigenen SLOCs geschlossen sind.', 'A side with at least 1 remaining AP and no open or covert escalatory action gains +1—even if both friendly SLOCs are closed.')}</p>
           <p><strong>{pick(language, 'Konvoisicherung:', 'Convoy Escort:')}</strong> {pick(language, 'hebt bei der nächsten Wertung genau einen „unter Druck“-Malus auf.', 'removes exactly one contested penalty during the next evaluation.')}</p>
           <p><strong>{pick(language, 'Ausbau:', 'Upgrade:')}</strong> {pick(language, 'Jede Seite besitzt genau zwei Karten „Zusätzliche Tonnage“. Für 1 AP steigt die eigene Ausweich-SLOC dauerhaft um 1, bis maximal Kapazität 5.', 'Each side has exactly two Additional Tonnage cards. For 1 AP, your Detour SLOC permanently gains 1 capacity, up to 5.')}</p>
           <p><strong>{pick(language, 'Kontrollverlust:', 'Loss of Control:')}</strong> {pick(language, 'Eskalation 8 erzeugt unabhängig vom Seeweg −1 Ertrag, bei eigener Eskalationsverantwortung −2.', 'Escalation 8 causes −1 Yield regardless of sea-line status, or −2 if the faction generated Escalation that round.')}</p>
@@ -964,6 +1000,15 @@ interface HandProps {
   waitMessage?: string
 }
 
+const covertUnavailableText = (reason: CovertUnavailableReason | undefined, totalCost: number, language: Language): string | undefined => {
+  if (!reason || reason === 'unsupported-card') return undefined
+  if (reason === 'insufficient-action-points') return pick(language, `Verdeckt benötigt ${totalCost} AP.`, `Covert requires ${totalCost} AP.`)
+  if (reason === 'no-base-target') return pick(language, 'Verdeckt: kein wirksames Ziel verfügbar.', 'Covert: no effective target is available.')
+  if (reason === 'friendly-awareness') return pick(language, 'Verdeckt: eigenes Lagebild 1 erforderlich.', 'Covert: friendly Awareness 1 is required.')
+  if (reason === 'enemy-awareness') return pick(language, 'Verdeckt: gegnerisches Lagebild höchstens 1.', 'Covert: opposing Awareness must be 1 or lower.')
+  return pick(language, 'Verdeckt: kein Ziel erfüllt alle Bedingungen.', 'Covert: no target meets all requirements.')
+}
+
 const CardHand = ({ state, selected, selectedRegions, selectedRoute, hybridResource, covert, error, onSelect, onResource, onCovert, onConfirm, onCancel, onEndTurn, locked = false, waitMessage }: HandProps) => {
   const language = useLanguage()
   const faction = state.activeFaction
@@ -975,6 +1020,12 @@ const CardHand = ({ state, selected, selectedRegions, selectedRoute, hybridResou
     insufficientAp: boolean
   }>()
   const card = selected ? cardText(selected.cardId, language) : undefined
+  const covertAvailability = selected && COVERT_CARD_IDS.includes(selected.cardId)
+    ? getCovertAvailability(state, selected.cardId)
+    : undefined
+  const covertUnavailable = covertAvailability
+    ? covertUnavailableText(covertAvailability.reason, covertAvailability.totalCost, language)
+    : undefined
   const play: CardPlay | undefined = selected ? { instanceId: selected.instanceId, regions: selectedRegions, routeId: selectedRoute, resource: hybridResource, covert } : undefined
   const totalCost = card ? card.cost + (covert ? 1 : 0) : 0
   const ready = card && play ? isPlayReady(card.id, play) && totalCost <= state.actionPoints : false
@@ -1035,17 +1086,8 @@ const CardHand = ({ state, selected, selectedRegions, selectedRoute, hybridResou
         </div>
         {card && (
           <div className="target-summary">
-            {COVERT_CARD_IDS.includes(card.id) && (
-              <button className={covert ? 'covert-active' : ''} type="button" onClick={() => onCovert(!covert)} disabled={!covert && card.cost + 1 > state.actionPoints}>
-                {covert ? pick(language, 'Verdeckt · Wirkung zur Wertung', 'Covert · resolves at evaluation') : pick(language, 'Offen spielen', 'Play openly')}
-              </button>
-            )}
             {selectedRegions.map((id, index) => <span key={`${id}-${index}`}>{index + 1}. {regionText(id, language).shortName}</span>)}
             {selectedRoute && <span>{routeText(selectedRoute, language).name}</span>}
-            {hybridOptions.length > 0 && !hybridResource && hybridOptions.map((resource) => (
-              <button type="button" key={resource} onClick={() => onResource(resource)}>{resourceText(resource, language).name} {pick(language, 'wählen', 'select')}</button>
-            ))}
-            {hybridResource && <span>{resourceText(hybridResource, language).name}</span>}
           </div>
         )}
         <div className="composer-actions">
@@ -1058,27 +1100,53 @@ const CardHand = ({ state, selected, selectedRegions, selectedRoute, hybridResou
         {state.hands[faction].map((instance) => {
           const definition = cardText(instance.cardId, language)
           const disabled = definition.cost > state.actionPoints || (definition.id === 'deescalation_channel' && state.escalation === 0)
+          const isSelected = selected?.instanceId === instance.instanceId
+          const hasConfiguration = isSelected && COVERT_CARD_IDS.includes(definition.id)
+          const displayedCost = definition.cost + (isSelected && covert ? 1 : 0)
+          const displayedRisk = isSelected && covert ? 0 : definition.escalation
           return (
-            <button
-              type="button"
-              className={`strategy-card ${selected?.instanceId === instance.instanceId ? 'selected' : ''}`}
+            <article
+              className={`strategy-card ${isSelected ? 'selected' : ''} ${hasConfiguration ? 'has-configuration' : ''} ${disabled ? 'is-disabled' : ''}`}
               key={instance.instanceId}
-              onClick={() => { if (!disabled) onSelect(instance) }}
-              aria-disabled={disabled}
-              aria-describedby={tooltip?.card.instanceId === instance.instanceId ? `card-help-${instance.instanceId}` : undefined}
               onMouseEnter={(event) => scheduleTooltip(instance, event.currentTarget, 700)}
               onMouseLeave={hideTooltip}
-              onFocus={(event) => scheduleTooltip(instance, event.currentTarget, 150)}
-              onBlur={hideTooltip}
             >
-              <span className="card-domain">{definition.domain}</span>
-              <span className="card-cost">{definition.cost}</span>
-              {definition.escalation > 0 && <span className="card-risk" title={`Eskalation +${definition.escalation}`}>△ +{definition.escalation}</span>}
-              <span className="card-icon"><CardIcon cardId={definition.id} /></span>
-              <strong>{definition.title}</strong>
-              <p>{definition.description}</p>
+              <button
+                className="strategy-card-select"
+                type="button"
+                onClick={() => onSelect(instance)}
+                disabled={disabled}
+                aria-pressed={isSelected}
+                aria-describedby={tooltip?.card.instanceId === instance.instanceId ? `card-help-${instance.instanceId}` : undefined}
+                onFocus={(event) => scheduleTooltip(instance, event.currentTarget, 150)}
+                onBlur={hideTooltip}
+              >
+                <span className="card-domain">{definition.domain}</span>
+                <span className="card-cost">{displayedCost}</span>
+                {(definition.escalation > 0 || (isSelected && covert)) && <span className={`card-risk ${displayedRisk === 0 ? 'is-zero' : ''}`} title={`${pick(language, 'Eskalation', 'Escalation')} +${displayedRisk}`}>△ +{displayedRisk}</span>}
+                <span className="card-icon"><CardIcon cardId={definition.id} /></span>
+                <strong>{definition.title}</strong>
+                <p>{definition.description}</p>
+              </button>
+              {hasConfiguration && covertAvailability && <div className="card-configuration" aria-label={pick(language, 'Aktionsart konfigurieren', 'Configure action mode')}>
+                <div className="card-segmented" role="group" aria-label={pick(language, 'Offen oder verdeckt', 'Open or covert')}>
+                  <button type="button" className={!covert ? 'is-active' : ''} aria-pressed={!covert} onClick={() => onCovert(false)}>{pick(language, 'OFFEN', 'OPEN')}</button>
+                  <button type="button" className={covert ? 'is-active' : ''} aria-pressed={covert} disabled={!covert && !covertAvailability.available} onClick={() => onCovert(true)}>{pick(language, 'VERDECKT', 'COVERT')}</button>
+                </div>
+                {definition.id === 'hybrid_pressure' && selectedRegions[0] && <div className="card-segmented resource-segmented" role="group" aria-label={pick(language, 'Zu suspendierende Ressource', 'Resource to suspend')}>
+                  {(['access', 'logistics'] as const).map((resource) => <button
+                    type="button"
+                    key={resource}
+                    className={hybridResource === resource ? 'is-active' : ''}
+                    aria-pressed={hybridResource === resource}
+                    disabled={!hybridOptions.includes(resource)}
+                    onClick={() => onResource(resource)}
+                  >{resourceText(resource, language).name.toUpperCase()}</button>)}
+                </div>}
+                {covertUnavailable && <small>{covertUnavailable}</small>}
+              </div>}
               <span className="card-footer">SLOC // {definition.id.toUpperCase().slice(0, 8)}</span>
-            </button>
+            </article>
           )
         })}
         {state.hands[faction].length === 0 && <div className="empty-hand">{pick(language, 'Keine Karten auf der Hand.', 'No cards in hand.')}</div>}
@@ -1170,9 +1238,20 @@ const ChangelogDialog = ({ onClose }: { onClose: () => void }) => {
   }, [onClose])
   const entries = [
     {
+      version: '1.0.5',
+      title: pick(language, 'Direkte Einsatzwahl und eindeutige Seewege', 'Direct operation choices and clear sea lines'),
+      current: true,
+      items: [
+        pick(language, 'Beschattung und Hybrider Druck erhalten direkt auf der ausgewählten Karte einen Schalter für OFFEN oder VERDECKT.', 'Shadowing and Hybrid Pressure now provide an OPEN or COVERT switch directly on the selected card.'),
+        pick(language, 'Hybrider Druck bietet nach der Zielwahl einen zweiten Schalter für ZUGANG oder LOGISTIK; nicht verfügbare Optionen werden unmittelbar erklärt.', 'After selecting a target, Hybrid Pressure offers a second switch for ACCESS or LOGISTICS; unavailable options are explained immediately.'),
+        pick(language, 'Alle vier SLOCs bleiben gleichzeitig in ihrer Koalitionsfarbe sichtbar und zeigen auf der Karte ihren Status sowie den aktuellen Ertrag.', 'All four SLOCs remain visible simultaneously in their coalition colour and show their status and current yield directly on the map.'),
+        pick(language, 'Geschlossene SLOCs stehen sichtbar still und bleiben klar Blau oder Rot zugeordnet; regionale Statusanzeigen bleiben perspektivisch für die aktive Koalition.', 'Closed SLOCs visibly stop while remaining clearly assigned to Blue or Red; regional status displays remain from the active coalition’s perspective.'),
+        pick(language, 'Die Hilfe stellt klar, dass der Ruhebonus auch bei zwei geschlossenen eigenen SLOCs gelten kann.', 'The help now clarifies that the Restraint bonus can still apply when both friendly SLOCs are closed.'),
+      ],
+    },
+    {
       version: '1.0.4',
       title: pick(language, 'Stilisierte strategische Seekarte', 'Stylized strategic nautical chart'),
-      current: true,
       items: [
         pick(language, 'Die Musik folgt nun den strategischen Eskalationsfenstern: Stabilität bei 0–2, kontrollierte Spannung bei 3–5 und maximale Krise bei 6–8.', 'Music now follows the strategic Escalation windows: stability at 0–2, controlled tension at 3–5, and maximum crisis at 6–8.'),
         pick(language, 'Eine ruhige, stilisierte Seekarte überträgt die neue Geografie mit zwei Küstenmassen und einer zentralen Freihafeninsel in den klaren strategischen Stil der früheren Karte.', 'A calm, stylized nautical chart carries the new geography with two coastal landmasses and a central Freeport island into the clear strategic style of the earlier map.'),
@@ -1350,7 +1429,7 @@ const ModeSelection = ({ language, onLanguage, rounds, onRounds, governments, on
         <AudioMenuButton musicVolume={musicVolume} musicMuted={musicMuted} onMusicVolume={onMusicVolume} onMusicMuted={onMusicMuted} onMusicStart={onMusicStart} />
       </div>
       <header className="mode-brand">
-        <BrandIdentity meta={pick(language, 'VERSION 1.0.4 · Strategische Seekarte', 'VERSION 1.0.4 · Strategic nautical chart')} />
+        <BrandIdentity meta={pick(language, 'VERSION 1.0.5 · Strategische Seekarte', 'VERSION 1.0.5 · Strategic nautical chart')} />
       </header>
       <section className="mode-intro">
         <span className="eyebrow">{pick(language, 'EINSATZBEREITSCHAFT HERSTELLEN', 'ESTABLISH READINESS')}</span>
@@ -1700,11 +1779,8 @@ function GameApp({ language, onLanguage }: { language: Language; onLanguage: (la
   const validRegions = useMemo(
     () => {
       if (!selectedCard || selectedDefinition?.target === 'route' || isPlayReady(selectedCard.cardId, { instanceId: selectedCard.instanceId, regions: selectedRegions, resource: hybridResource })) return []
-      const targets = getValidRegionTargets(state, selectedCard.cardId, selectedRegions)
-      if (!covert || selectedRegions.length > 0) return targets
-      const faction = state.activeFaction
-      const opponent = otherFaction(faction)
-      return targets.filter((regionId) => getEffectiveResources(state, regionId, faction).awareness >= 1 && getEffectiveResources(state, regionId, opponent).awareness <= 1)
+      if (covert && selectedRegions.length === 0) return getCovertAvailability(state, selectedCard.cardId).targets
+      return getValidRegionTargets(state, selectedCard.cardId, selectedRegions)
     },
     [state, selectedCard, selectedDefinition, selectedRegions, hybridResource, covert],
   )
@@ -1739,7 +1815,35 @@ function GameApp({ language, onLanguage }: { language: Language; onLanguage: (la
     setInspected(regionId)
     if (!selectedCard || !validRegions.includes(regionId)) return
     setSelectedRegions((current) => [...current, regionId])
-    setHybridResource(undefined)
+    if (selectedDefinition?.target === 'hybrid-resource' && selectedRegions.length === 0) {
+      const options = getValidHybridResources(state, regionId)
+      setHybridResource(options.length === 1 ? options[0] : undefined)
+    } else {
+      setHybridResource(undefined)
+    }
+  }
+
+  const handleCovertMode = (value: boolean) => {
+    setCovert(value)
+    setError(undefined)
+    if (!selectedCard) return
+
+    const allowedTargets = value
+      ? getCovertAvailability(state, selectedCard.cardId).targets
+      : getValidRegionTargets(state, selectedCard.cardId)
+    const retainedTarget = selectedRegions[0] && allowedTargets.includes(selectedRegions[0])
+      ? selectedRegions[0]
+      : undefined
+
+    setSelectedRegions(retainedTarget ? [retainedTarget] : [])
+    if (selectedDefinition?.target === 'hybrid-resource' && retainedTarget) {
+      const options = getValidHybridResources(state, retainedTarget)
+      setHybridResource((current) => current && options.includes(current)
+        ? current
+        : options.length === 1 ? options[0] : undefined)
+    } else {
+      setHybridResource(undefined)
+    }
   }
 
   const handleRouteClick = (routeId: RouteId) => {
@@ -2011,12 +2115,7 @@ function GameApp({ language, onLanguage }: { language: Language; onLanguage: (la
           error={error}
           onSelect={handleSelectCard}
           onResource={setHybridResource}
-          onCovert={(value) => {
-            setCovert(value)
-            setSelectedRegions([])
-            setHybridResource(undefined)
-            setError(undefined)
-          }}
+          onCovert={handleCovertMode}
           onConfirm={handleConfirm}
           onCancel={clearSelection}
           onEndTurn={handleEndTurn}

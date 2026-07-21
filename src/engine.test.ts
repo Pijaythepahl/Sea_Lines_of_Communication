@@ -9,6 +9,7 @@ import {
   endTurn,
   evaluateChokepoint,
   getEffectiveResources,
+  getCovertAvailability,
   getValidRegionTargets,
   hasSupplyConnection,
   getUsability,
@@ -278,6 +279,15 @@ describe('Karten und Rundenfolge', () => {
     expect(calculateRoundYield(state, 'blue')).toMatchObject({ restraintBonus: 0 })
   })
 
+  it('vergibt den Ruhebonus auch bei zwei geschlossenen eigenen SLOCs', () => {
+    const state = createInitialState()
+    state.regions.western_sea.resources.blue.access = 0
+    state.endedActionPoints.blue = 1
+    expect(calculateRouteYield(state, 'blue_main').blocked).toBe(true)
+    expect(calculateRouteYield(state, 'blue_detour').blocked).toBe(true)
+    expect(calculateRoundYield(state, 'blue')).toMatchObject({ yield: 1, restraintBonus: 1, blocked: true })
+  })
+
   it('wertet Kontrollverlust unabhängig von blockierten Routen mit −1 oder −2', () => {
     const state = createInitialState()
     state.escalation = 8
@@ -300,6 +310,26 @@ describe('Karten und Rundenfolge', () => {
     expect(prepared.log[0].message).not.toMatch(/Beschattung|Zentral/)
     state.regions.central_basin.resources.red.awareness = 2
     expect(() => playCard(state, { instanceId: card.instanceId, regions: ['central_basin'], covert: true })).toThrow(/gegnerischem Lagebild/)
+  })
+
+  it('erklärt die Verfügbarkeit verdeckter Aktionen für die Kartensteuerung', () => {
+    const state = createInitialState()
+    state.regions.central_basin.resources.blue.awareness = 1
+    state.regions.central_basin.resources.red.awareness = 1
+    expect(getCovertAvailability(state, 'shadowing_operation')).toMatchObject({
+      available: true,
+      totalCost: 2,
+      targets: expect.arrayContaining(['central_basin']),
+    })
+
+    state.actionPoints = 1
+    expect(getCovertAvailability(state, 'shadowing_operation').reason).toBe('insufficient-action-points')
+    state.actionPoints = 3
+    state.regions.central_basin.resources.blue.awareness = 0
+    expect(getCovertAvailability(state, 'shadowing_operation').reason).toBe('friendly-awareness')
+    state.regions.central_basin.resources.blue.awareness = 1
+    state.regions.central_basin.resources.red.awareness = 2
+    expect(getCovertAvailability(state, 'shadowing_operation').reason).toBe('enemy-awareness')
   })
 
   it('löst verdeckte Wirkungen verzögert auf und hält ihre Details aus der Gegnersicht', () => {
