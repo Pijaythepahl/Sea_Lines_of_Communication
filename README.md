@@ -1,6 +1,15 @@
 # Sea Lines of Communication
 
-Rundenbasiertes maritimes Strategiespiel für Desktop und Laptop. Version 1.0.5 bietet eine vollständig deutsch- und englischsprachige Oberfläche, variable Einsatzdauer sowie Einzelspieler, lokales Pass-and-play und private Online-Partien.
+Rundenbasiertes maritimes Strategiespiel für Desktop und Laptop. Version 1.0.6 bietet eine kompakte, vollständig deutsch- und englischsprachige Regelreferenz sowie variable Einsatzdauer, Einzelspieler, lokales Pass-and-play und private Online-Partien.
+
+## Version 1.0.6
+
+- Ein deutlich größeres Anleitungsfenster ordnet die Spielmechanik in acht direkt anwählbare Kapitel und lässt die laufende strategische Oberfläche im Hintergrund sichtbar.
+- Die Anleitung ist bereits im Hauptmenü neben dem Changelog sowie weiterhin über „Hilfe“ im laufenden Spiel erreichbar.
+- Regeln, Schwellenwerte, Startaufstellung, Kartenbedingungen und Ertragsrechnung stehen als schnell scanbare Nachschlageinformationen im Vordergrund.
+- Demokratie und Autokratie erhalten eine eigene Eskalationstabelle mit ihren Bonusfenstern 0–2 beziehungsweise 3–5 und der zugrunde liegenden Spielabstraktion.
+- Alle elf Karten stehen in Regelkern-Reihenfolge mit AP-Kosten, Ziel, Wirkung, Einschränkungen und offener Eskalation in einer vollständigen Referenz.
+- Mahan, Corbett und Wegener bleiben als knappe Hinweise zum strategischen Designhintergrund erhalten, ohne die Regelstruktur zu bestimmen.
 
 ## Version 1.0.5
 
@@ -80,7 +89,7 @@ Rundenbasiertes maritimes Strategiespiel für Desktop und Laptop. Version 1.0.5 
 - WebSockets synchronisieren Karte, Ausbau, Zugwechsel und Verbindungsstatus in Echtzeit.
 - Gegnerische Hände, Decks, Abwurfdetails und geheime Aufträge werden nicht übertragen.
 
-## Regeln in Version 1.0.5
+## Regeln in Version 1.0.6
 
 - Ausweich-SLOCs starten bei Kapazität 3 und können mit den beiden Karten „Zusätzliche Tonnage“ dauerhaft bis 5 ausgebaut werden.
 - Eine friedliche Seite mit mindestens 1 Rest-AP erhält bei der Wertung +1 Ruhebonus, selbst wenn beide eigenen SLOCs geschlossen sind.

@@ -55,6 +55,7 @@ import {
   type RoomSnapshot,
 } from './multiplayer'
 import { getMusicTrackForEscalation, MUSIC_TRACKS } from './music'
+import { HelpDialog } from './HelpDialog'
 import type {
   CardInstance,
   CardPlay,
@@ -702,90 +703,6 @@ const Scoreboard = ({ state, validRoutes, selectedRoute, onRouteClick }: Scorebo
   </aside>
 }
 
-const HelpDialog = ({ onClose }: { onClose: () => void }) => {
-  const language = useLanguage()
-  useEffect(() => {
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose()
-    }
-    window.addEventListener('keydown', closeOnEscape)
-    return () => window.removeEventListener('keydown', closeOnEscape)
-  }, [onClose])
-
-  return (
-    <div
-      className="modal-backdrop rules-backdrop"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="help-title"
-      onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}
-    >
-      <section className="route-rules-dialog help-dialog">
-        <header>
-          <div><span className="eyebrow">{pick(language, 'SPIELHILFE · VERSION 1.0.5', 'GAME HELP · VERSION 1.0.5')}</span><h2 id="help-title">{pick(language, 'Seewege führen', 'Command the Sea Lines')}</h2></div>
-          <button type="button" onClick={onClose} aria-label={pick(language, 'Regelhilfe schließen', 'Close rules')}>×</button>
-        </header>
-
-        <div className="help-section-grid">
-          <article><h3>{pick(language, 'Spielablauf', 'Turn flow')}</h3><p>{pick(language, 'Jede Koalition erhält 3 AP. Spiele Karten, wähle ihre Ziele auf der Karte und beende anschließend den Zug. Nach beiden Zügen zählt nur die ertragreichste nutzbare SLOC.', 'Each coalition receives 3 AP. Play cards, choose their targets on the map, then end the turn. After both turns, only the highest-yield usable SLOC scores.')}</p></article>
-          <article><h3>{pick(language, 'Karten und Flotten', 'Cards and fleets')}</h3><p>{pick(language, 'Patrouillenverband verlegt 1 Präsenz für 1 AP ein oder zwei Felder weit und erzeugt am Ziel bis zur Wertung mindestens Lagebild 1; verwehrte Zwischenräume können nicht übersprungen werden. Vorausstationierung verstärkt dauerhaft das Heimatmeer oder einen versorgten Vorposten.', 'Patrol Group moves 1 Presence one or two regions for 1 AP and provides at least 1 Awareness at the destination until evaluation; denied intermediate regions cannot be crossed. Forward Deployment permanently reinforces the home sea or a supplied outpost.')}</p></article>
-          <article><h3>{pick(language, 'Verdeckte Aktionen', 'Covert actions')}</h3><p>{pick(language, 'Wähle Beschattung oder Hybriden Druck und schalte direkt auf der Karte zwischen OFFEN und VERDECKT um. Verdeckt kostet +1 AP, benötigt eigenes Lagebild 1 sowie gegnerisches Lagebild höchstens 1 und wirkt erst vor der Wertung. Bei Hybridem Druck wählst du zusätzlich ZUGANG oder LOGISTIK.', 'Select Shadowing or Hybrid Pressure and switch directly on the card between OPEN and COVERT. Covert costs +1 AP, requires friendly Awareness 1 and opposing Awareness no higher than 1, and resolves before evaluation. Hybrid Pressure also lets you choose ACCESS or LOGISTICS.')}</p></article>
-          <article><h3>{pick(language, 'Staatsformen und Führung', 'Governments and leadership')}</h3><p>{pick(language, 'Demokratien erhalten +1 Ertrag bei Eskalation 0–2, Autokratien bei 3–5. Ab 6 gilt kein Vorteil. Die Endnote berücksichtigt Ergebnisabstand, Wirtschaft, Eskalation und Verantwortung.', 'Democracies gain +1 Yield at Escalation 0–2, Autocracies at 3–5. No government gains a bonus from 6 onward. The final rating uses result margin, Economy, Escalation, and Responsibility.')}</p></article>
-        </div>
-
-        <div className="projection-explainer">
-          <span>{pick(language, 'Berechnung je Region und Seite', 'Calculated for each region and side')}</span>
-          <strong>{pick(language, 'Präsenz + Lagebild + Zugang + Logistik = Projektion', 'Presence + Awareness + Access + Logistics = Projection')}</strong>
-          <p>{pick(language, 'Die eigene Projektion wird immer mit der gegnerischen Projektion in derselben Region verglichen.', 'Your Projection is always compared with opposing Projection in the same region.')}</p>
-        </div>
-
-        <div className="route-status-grid">
-          <article className="status-free">
-            <div><i /> <strong>{pick(language, 'Frei nutzbar', 'Open')}</strong></div>
-            <p>{pick(language, 'Deine Projektion ist mindestens so hoch wie die gegnerische.', 'Your Projection is at least as high as opposing Projection.')}</p>
-            <small>{pick(language, 'Die Region verursacht keinen zusätzlichen SLOC-Malus.', 'The region causes no additional SLOC penalty.')}</small>
-          </article>
-          <article className="status-contested">
-            <div><i /> <strong>{pick(language, 'Unter Druck', 'Contested')}</strong></div>
-            <p>{pick(language, 'Deine Projektion liegt genau 1 oder 2 Punkte hinter der gegnerischen.', 'Your Projection is exactly 1 or 2 points below opposing Projection.')}</p>
-            <small>{pick(language, 'Der Seeweg bleibt offen, verliert aber je betroffener Region 1 Ertrag.', 'The sea line remains open but loses 1 Yield for each affected region.')}</small>
-          </article>
-          <article className="status-denied">
-            <div><i /> <strong>{pick(language, 'Verwehrt / zu', 'Denied / closed')}</strong></div>
-            <p>{pick(language, 'Deine Projektion liegt mindestens 3 Punkte hinter der gegnerischen.', 'Your Projection is at least 3 points below opposing Projection.')}</p>
-            <small>{pick(language, 'Jede SLOC durch diese Region ist für dich geschlossen.', 'Every SLOC crossing this region is closed to you.')}</small>
-          </article>
-        </div>
-
-        <div className="closure-rules">
-          <h3>{pick(language, 'Eine SLOC ist außerdem geschlossen, wenn …', 'A SLOC is also closed when …')}</h3>
-          <ul>
-            <li>{pick(language, 'am Ausgangsraum oder am Freihafen kein eigener aktiver Zugang mehr besteht,', 'there is no active friendly Access at the origin or Freeport,')}</li>
-            <li>{pick(language, 'mindestens eine durchquerte Region für die Seite verwehrt ist, oder', 'at least one traversed region is denied to the side, or')}</li>
-            <li>{pick(language, 'die gegnerische Seite die Meridianstraße kontrolliert – dies betrifft nur die Haupt-SLOC.', 'the opposing side controls Meridian Strait – this only affects the Main SLOC.')}</li>
-          </ul>
-        </div>
-
-        <div className="rules-notes">
-          <p><strong>{pick(language, 'Freihafen:', 'Freeport:')}</strong> {pick(language, 'militärische Projektionsüberlegenheit kann den neutralen Markt höchstens unter Druck setzen, nie verwehren. Ohne aktiven eigenen Zugang bleibt die SLOC dennoch geschlossen.', 'military Projection superiority can at most contest the neutral market, never deny it. Without active friendly Access, the SLOC is still closed.')}</p>
-          <p><strong>{pick(language, 'Engpasskontrolle:', 'Chokepoint control:')}</strong> {pick(language, 'mindestens 2 Punkte Projektionsvorsprung sowie 2 Präsenz und 1 Zugang in der Meridianstraße. Die Ausweich-SLOC bleibt möglich.', 'at least a 2-point Projection lead plus 2 Presence and 1 Access in Meridian Strait. The Detour SLOC remains available.')}</p>
-          <p><strong>{pick(language, 'Präsenz und Lagebild:', 'Presence and Awareness:')}</strong> {pick(language, 'Vorausstationierung verbessert das dauerhafte Lagebild bis maximal 2. Ein Patrouillenverband stellt am Ziel bis zur nächsten Wertung ein nicht stapelbares Lagebild von mindestens 1 her.', 'Forward Deployment improves permanent Awareness up to 2. A Patrol Group establishes non-stacking Awareness of at least 1 at its destination until the next evaluation.')}</p>
-          <p><strong>{pick(language, 'Versorgte Vorposten:', 'Supplied outposts:')}</strong> {pick(language, 'benötigen aktiven Zugang, aktive Logistik und einen nicht verwehrten Abschnitt einer eigenen SLOC bis zum Heimatmeer.', 'require active Access, active Logistics, and a non-denied segment of a friendly SLOC back to the home sea.')}</p>
-          <p><strong>{pick(language, 'Eskalation:', 'Escalation:')}</strong> {pick(language, 'verändert nicht den Status „frei/zu“, reduziert aber zusätzlich den wirtschaftlichen Ertrag einer weiterhin nutzbaren SLOC.', 'does not change open/closed status, but further reduces the economic Yield of an otherwise usable SLOC.')}</p>
-          <p><strong>{pick(language, 'Kartenanzeige:', 'Map display:')}</strong> {pick(language, 'Die regionalen Zustände Frei, Unter Druck und Zu gelten weiterhin nur für die aktive Koalition. Die vier SLOCs bleiben dagegen gleichzeitig sichtbar; ihre Plaketten zeigen Koalition, Offen/Zu und den aktuellen Routenertrag.', 'Regional Open, Contested, and Denied states still apply only to the active coalition. All four SLOCs remain visible at once; their badges show coalition, Open/Closed, and current route yield.')}</p>
-          <p><strong>{pick(language, 'Ruhebonus:', 'Restraint bonus:')}</strong> {pick(language, 'Eine Seite mit mindestens 1 Rest-AP und ohne offene oder verdeckte Eskalationsaktion erhält +1 – auch wenn beide eigenen SLOCs geschlossen sind.', 'A side with at least 1 remaining AP and no open or covert escalatory action gains +1—even if both friendly SLOCs are closed.')}</p>
-          <p><strong>{pick(language, 'Konvoisicherung:', 'Convoy Escort:')}</strong> {pick(language, 'hebt bei der nächsten Wertung genau einen „unter Druck“-Malus auf.', 'removes exactly one contested penalty during the next evaluation.')}</p>
-          <p><strong>{pick(language, 'Ausbau:', 'Upgrade:')}</strong> {pick(language, 'Jede Seite besitzt genau zwei Karten „Zusätzliche Tonnage“. Für 1 AP steigt die eigene Ausweich-SLOC dauerhaft um 1, bis maximal Kapazität 5.', 'Each side has exactly two Additional Tonnage cards. For 1 AP, your Detour SLOC permanently gains 1 capacity, up to 5.')}</p>
-          <p><strong>{pick(language, 'Kontrollverlust:', 'Loss of Control:')}</strong> {pick(language, 'Eskalation 8 erzeugt unabhängig vom Seeweg −1 Ertrag, bei eigener Eskalationsverantwortung −2.', 'Escalation 8 causes −1 Yield regardless of sea-line status, or −2 if the faction generated Escalation that round.')}</p>
-          <p><strong>{pick(language, 'Führungswertung:', 'Leadership rating:')}</strong> {pick(language, 'Ergebnis zählt bis 4, Wirtschaft, durchschnittliche Eskalation und Verantwortung jeweils bis 2 Punkte. Halbpunktwerte markieren die festen Schwellen zwischen den Bewertungsbändern.', 'Result contributes up to 4 points; Economy, average Escalation, and Responsibility contribute up to 2 each. Half points mark the fixed thresholds between rating bands.')}</p>
-        </div>
-
-        <footer><button className="confirm-button" type="button" onClick={onClose}>{pick(language, 'Verstanden', 'Understood')}</button></footer>
-      </section>
-    </div>
-  )
-}
-
 interface MusicSettingsProps {
   musicVolume: number
   musicMuted: boolean
@@ -1238,9 +1155,20 @@ const ChangelogDialog = ({ onClose }: { onClose: () => void }) => {
   }, [onClose])
   const entries = [
     {
+      version: '1.0.6',
+      title: pick(language, 'Spielanleitung und Regelreferenz', 'Game guide and rules reference'),
+      current: true,
+      items: [
+        pick(language, 'Ein deutlich größeres Hilfefenster gliedert die Spielregeln in acht direkt anwählbare Kapitel.', 'A significantly larger help window organizes the rules into eight directly selectable chapters.'),
+        pick(language, 'Die Anleitung ist nun bereits im Hauptmenü verfügbar und bleibt während einer laufenden Partie über das Spielmenü erreichbar.', 'The guide is now available from the main menu and remains accessible through the game menu during a match.'),
+        pick(language, 'Regeln, Zahlen, Startaufstellung, SLOC-Pfade und Führungswertung sind als schnell scanbare Nachschlageinformationen aufbereitet.', 'Rules, numbers, starting setup, SLOC paths, and leadership rating are presented as fast-scanning reference information.'),
+        pick(language, 'Eine vollständige Kartenreferenz führt alle elf Karten in Regelkern-Reihenfolge mit Kosten, Zielen und Voraussetzungen auf.', 'A complete card reference lists all eleven cards in rule-engine order with costs, targets, and requirements.'),
+        pick(language, 'Eine eigene Staatsformtabelle erklärt die Bonusfenster von Demokratie und Autokratie; Strategenhinweise bleiben als knapper Designhintergrund eingebunden.', 'A dedicated government table explains the bonus windows for Democracy and Autocracy; strategist notes remain as concise design background.'),
+      ],
+    },
+    {
       version: '1.0.5',
       title: pick(language, 'Direkte Einsatzwahl und eindeutige Seewege', 'Direct operation choices and clear sea lines'),
-      current: true,
       items: [
         pick(language, 'Beschattung und Hybrider Druck erhalten direkt auf der ausgewählten Karte einen Schalter für OFFEN oder VERDECKT.', 'Shadowing and Hybrid Pressure now provide an OPEN or COVERT switch directly on the selected card.'),
         pick(language, 'Hybrider Druck bietet nach der Zielwahl einen zweiten Schalter für ZUGANG oder LOGISTIK; nicht verfügbare Optionen werden unmittelbar erklärt.', 'After selecting a target, Hybrid Pressure offers a second switch for ACCESS or LOGISTICS; unavailable options are explained immediately.'),
@@ -1406,6 +1334,7 @@ const ModeSelection = ({ language, onLanguage, rounds, onRounds, governments, on
   const [joiningCode, setJoiningCode] = useState<string>()
   const [joinGovernment, setJoinGovernment] = useState<GovernmentType>('democracy')
   const [showChangelog, setShowChangelog] = useState(false)
+  const [showHelp, setShowHelp] = useState(false)
 
   const confirmLaunch = () => {
     if (launchMode === 'singleplayer') onSingleplayer(true)
@@ -1429,7 +1358,7 @@ const ModeSelection = ({ language, onLanguage, rounds, onRounds, governments, on
         <AudioMenuButton musicVolume={musicVolume} musicMuted={musicMuted} onMusicVolume={onMusicVolume} onMusicMuted={onMusicMuted} onMusicStart={onMusicStart} />
       </div>
       <header className="mode-brand">
-        <BrandIdentity meta={pick(language, 'VERSION 1.0.5 · Strategische Seekarte', 'VERSION 1.0.5 · Strategic nautical chart')} />
+        <BrandIdentity meta={pick(language, 'VERSION 1.0.6 · Strategische Seekarte', 'VERSION 1.0.6 · Strategic nautical chart')} />
       </header>
       <section className="mode-intro">
         <span className="eyebrow">{pick(language, 'EINSATZBEREITSCHAFT HERSTELLEN', 'ESTABLISH READINESS')}</span>
@@ -1491,7 +1420,8 @@ const ModeSelection = ({ language, onLanguage, rounds, onRounds, governments, on
       </section>
       {busy && <div className="mode-status"><span className="waiting-signal"><i /><i /><i /></span> {pick(language, 'Verbindung wird hergestellt …', 'Establishing connection …')}</div>}
       {error && <div className="mode-error" role="alert">{formatError(error, language)}</div>}
-      <footer className="mode-footer"><span>6–18 {pick(language, 'Runden', 'Rounds')}</span><i /> <span>{pick(language, 'Keine Registrierung', 'No registration')}</span><i /> <span>{pick(language, 'Private Raumcodes', 'Private room codes')}</span><i /> <button type="button" className="mode-changelog-button" aria-haspopup="dialog" onClick={() => setShowChangelog(true)}>Changelog</button></footer>
+      <footer className="mode-footer"><span>6–18 {pick(language, 'Runden', 'Rounds')}</span><i /> <span>{pick(language, 'Keine Registrierung', 'No registration')}</span><i /> <span>{pick(language, 'Private Raumcodes', 'Private room codes')}</span><i /> <button type="button" className="mode-changelog-button" aria-haspopup="dialog" onClick={() => setShowHelp(true)}>{pick(language, 'Anleitung', 'Guide')}</button><i /> <button type="button" className="mode-changelog-button" aria-haspopup="dialog" onClick={() => setShowChangelog(true)}>Changelog</button></footer>
+      {showHelp && <HelpDialog onClose={() => setShowHelp(false)} />}
       {showChangelog && <ChangelogDialog onClose={() => setShowChangelog(false)} />}
       {launchMode && (
         <div className="modal-backdrop launch-backdrop" role="dialog" aria-modal="true" aria-labelledby="round-selection-title">
